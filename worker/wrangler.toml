@@ -1,0 +1,13 @@
+name = "range-log"
+main = "worker.js"
+compatibility_date = "2026-07-11"
+preview_urls = false
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+
+[vars]
+ALLOWED_ORIGIN = "https://range-log-app-v5.netlify.app"
