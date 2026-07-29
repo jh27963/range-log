@@ -1,8 +1,8 @@
 # Migrating off Notion to Supabase
 
-Not started. This is the plan for when it happens — written while the Notion
-version is still the live one, so treat anything here as a proposal to revisit,
-not a spec already agreed to.
+**Phase 1 (schema + data + reconciliation) is done.** Phases 2-5 below
+(Worker, app, queries, cutover) are not started — the live app is still
+100% Notion-backed today. Nothing here changed the Worker or `app/index.html`.
 
 **Why:** every other project of yours lives in Supabase. Notion's SQL-via-MCP
 layer can't see formulas/rollups (`On Hand (Calc)`, `Lifetime Rounds`, etc.),
@@ -11,93 +11,52 @@ real Postgres schema fighting to get out. Doing this now, while the schema
 issues in `docs/backlog.md` are already being looked at, means fixing them
 once instead of once in Notion and again in Postgres.
 
-**Why not now:** this touches every layer — schema, Worker, app, every saved
-query — and today's task was just getting the current version shipped. Full
-scope below.
+**Why not all at once:** this touches every layer — schema, Worker, app,
+every saved query. Phase 1 (below) proves the data is portable and correct
+without touching anything user-facing; phases 2-5 are a separate future
+session.
+
+## Phase 1 results (done)
+
+- Supabase project: `ywblwmbaiplnphiqzalm` ("jh27963's Project" — the only
+  project on the account, already used by `my-team`). No new project created.
+- Schema applied — see `supabase/schema.sql` for the exact DDL, including a
+  fix applied after the initial migration: both calc views needed
+  `security_invoker = on` (Postgres/Supabase default for views is otherwise
+  definer-like, which the security linter correctly flags as bypassing RLS
+  on the underlying tables).
+- Row counts loaded and verified: `firearms` 5, `ammunition_inventory` 4
+  (junk rows — stray `.45 ACP`, empty untitled — excluded per
+  `docs/backlog.md`), `ammo_purchases` 43, `range_sessions` 372. Every
+  `firearm_id`/`ammo_stock_id`/`stock_id` foreign key resolved (0 unresolved).
+- Reconciled exactly against the known-good numbers in
+  `sql/inventory-reconcile.sql`: 9mm 600, .380 ACP 250, 5.56 NATO 570,
+  .22 LR 750 — all four match.
+- `get_advisors` (security) clean of new findings beyond the RLS-no-policy
+  INFO level already present on every table in this project.
 
 ---
 
-## 1. Schema
+## 1. Schema (done — see `supabase/schema.sql`)
 
-Same shape as `docs/schema.md`, but relations become real foreign keys and
-rollups/formulas become views (or generated columns) instead of app-side
-recomputation.
+Same shape as `docs/schema.md`, but relations are real foreign keys and
+rollups/formulas are views instead of app-side recomputation. Every table
+also has a `notion_id text unique` column — the source-of-truth link back
+to Notion, kept for traceability and idempotent re-import, not just a
+migration artifact to drop later.
 
-```sql
-create table firearms (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  type text,
-  caliber text,
-  make text,
-  model text,
-  purchase_date date,
-  last_cleaned date
-);
-
-create table ammunition_inventory (
-  id uuid primary key default gen_random_uuid(),
-  caliber text not null,
-  low_stock_alert integer,
-  notes text
-);
-
-create table range_sessions (
-  id uuid primary key default gen_random_uuid(),
-  firearm_id uuid not null references firearms(id),
-  ammo_stock_id uuid not null references ammunition_inventory(id),
-  date date not null,
-  caliber text,        -- kept denormalized, same rationale as today
-  rounds_fired integer not null,
-  ammo_type text,
-  distance_yds integer,
-  accuracy text,
-  target_type text,
-  notes text
-);
-
-create table ammo_purchases (
-  id uuid primary key default gen_random_uuid(),
-  stock_id uuid not null references ammunition_inventory(id),
-  date date not null,
-  caliber text,
-  rounds integer not null,
-  total_cost numeric not null,
-  ammo_type text,
-  brand text,
-  vendor text,
-  notes text
-);
-```
-
-`Gun` / `Ammo Stock` / `Stock` become `NOT NULL` foreign keys instead of
+`Gun` / `Ammo Stock` / `Stock` are `NOT NULL` foreign keys instead of
 optional relations — this is the fix for backlog item "session with blank
-Ammo Stock silently drops out of rollups." A missing relation becomes an
+Ammo Stock silently drops out of rollups." A missing relation is now an
 insert-time error instead of a silent data bug.
 
-Rollups become a view:
+`ammo_purchases.cost_per_round` is a generated column (`total_cost / rounds`,
+null-guarded), matching the Notion formula 1:1.
 
-```sql
-create view ammunition_inventory_calc as
-select
-  i.*,
-  coalesce(p.total_purchased, 0) as total_purchased,
-  coalesce(s.total_fired, 0) as total_rounds_fired,
-  coalesce(p.total_purchased, 0) - coalesce(s.total_fired, 0) as on_hand,
-  coalesce(p.total_spent, 0) as total_spent
-from ammunition_inventory i
-left join (select stock_id, sum(rounds) total_purchased, sum(total_cost) total_spent
-           from ammo_purchases group by stock_id) p on p.stock_id = i.id
-left join (select ammo_stock_id, sum(rounds_fired) total_fired
-           from range_sessions group by ammo_stock_id) s on s.ammo_stock_id = i.id;
-```
-
-Same pattern for `firearms_calc` (lifetime rounds, range trips, last fired).
-
-**Synthetic data:** keep the `Reconstructed —` tagging convention in `notes`
-on migrated rows rather than dropping the synthetic history — the balances
-depend on the full purchase ledger being present, and `sql/real-sessions.sql`
-already knows how to filter it out.
+**Synthetic data:** the `Reconstructed —` tagging convention was preserved in
+`notes` on migrated rows rather than dropping the synthetic history — the
+balances depend on the full purchase ledger being present, and
+`sql/real-sessions.sql` already knows how to filter it out.
 
 ## 2. The Worker
 
@@ -127,24 +86,22 @@ since they're just views now.
 
 ## 5. Migration + cutover
 
-1. Stand up the schema in a Supabase project.
-2. One-time export: pull every row from all 4 Notion data sources (via the
-   existing MCP SQL access) and insert into the new tables, preserving IDs
-   only where useful (Notion page IDs don't need to survive; the FK
-   relationships do).
-3. Reconcile before cutover: compare `On Hand (Calc)` per caliber in Notion
-   against `ammunition_inventory_calc.on_hand` in Supabase. They must match
-   exactly before the old version is retired — this is the one number that
-   actually matters.
-4. Point the Worker at Supabase, redeploy, redeploy the app if endpoint
-   shapes changed.
-5. Leave Notion read-only (don't delete) for a few weeks as a backup until
-   confidence is high.
+1. ~~Stand up the schema in a Supabase project.~~ Done.
+2. ~~One-time export: pull every row from all 4 Notion data sources and
+   insert into the new tables.~~ Done — 372 sessions, 43 purchases, 5
+   firearms, 4 inventory rows. Notion page IDs preserved as `notion_id`
+   rather than discarded (useful for auditing, not just migration plumbing).
+3. ~~Reconcile before cutover.~~ Done — exact match, see Phase 1 results above.
+4. **Not started:** point the Worker at Supabase, redeploy, redeploy the app
+   if endpoint shapes changed.
+5. **Not started:** leave Notion read-only (don't delete) for a few weeks as
+   a backup until confidence is high in the new backend.
 
-## Open questions for when this actually starts
+## Decisions made when Phase 1 started
 
-- Keep Notion around as a read-only historical archive, or export and
-  decommission it entirely?
-- Same Supabase project as your other data, or a dedicated one for this?
-- Does `docs/backlog.md`'s Notion cleanup items (dead column, junk rows) get
-  fixed in Notion first, or just not carried over into the new schema at all?
+- Notion stays as a read-only historical backup after cutover — not deleted,
+  not decided later.
+- Same Supabase project as your other data (only one exists on the account)
+  — no dedicated project.
+- The two known-junk Ammunition Inventory rows were excluded during import
+  rather than cleaned up in Notion first — Notion itself is untouched.
