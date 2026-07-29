@@ -1,8 +1,11 @@
 # Migrating off Notion to Supabase
 
-**Phase 1 (schema + data + reconciliation) is done.** Phases 2-5 below
-(Worker, app, queries, cutover) are not started — the live app is still
-100% Notion-backed today. Nothing here changed the Worker or `app/index.html`.
+**Done — all 5 phases.** The app has been fully cut over to Supabase
+(2026-07-29). Notion is untouched and left in place as a read-only
+historical backup; nothing writes to it anymore. See `docs/schema.md` for
+the live schema and `docs/ids.md` for the current endpoint/deployment
+reference — this file is now a record of how the migration happened, not a
+todo list.
 
 **Why:** every other project of yours lives in Supabase. Notion's SQL-via-MCP
 layer can't see formulas/rollups (`On Hand (Calc)`, `Lifetime Rounds`, etc.),
@@ -58,50 +61,73 @@ null-guarded), matching the Notion formula 1:1.
 balances depend on the full purchase ledger being present, and
 `sql/real-sessions.sql` already knows how to filter it out.
 
-## 2. The Worker
+## 2. The Worker (done)
 
-Your other Supabase project (`my-team/worker`) keeps a thin Cloudflare Worker
-in front of Supabase rather than calling Supabase directly from the client —
-same shape as `range-log`'s current relay. Follow that precedent: repurpose
-`worker/worker.js` to hold the Supabase service-role key and proxy a small
-allowlist of operations (insert session, insert purchase, read views), same
-CORS/allowlist structure it already has. Don't switch to client-side
-`anon` key + RLS unless there's a specific reason to diverge from the
-`my-team` pattern.
+Rewrote `worker/worker.js` to proxy Supabase instead of Notion — same
+thin-relay shape (CORS, health check, method+path allowlist), following the
+precedent in `my-team/worker/index.js` (plain `fetch()` to PostgREST with
+the `service_role` key, no supabase-js dependency). Four routes: `GET
+/firearms`, `GET /inventory` (both read the `_calc` views), `POST
+/sessions`, `POST /purchases`. `SUPABASE_URL` is a plain `wrangler.toml`
+var; `SUPABASE_SERVICE_KEY` is a Worker secret the user set himself so the
+raw key never touched this conversation.
 
-## 3. The app
+**Bug found during this rewrite:** all four tables had `notion_id text
+unique NOT NULL` — fine for the migrated Notion rows, but it meant the live
+app could never insert a *new* row, since new rows have no Notion origin.
+Fixed with `alter table ... alter column notion_id drop not null` across
+all four tables. `supabase/schema.sql` reflects the fix.
 
-`app/index.html`'s `fetch()` calls change from Notion's page-creation shape
-to plain inserts/selects against the Worker's new endpoints. The three
-allowlisted routes get replaced with their Supabase equivalents (e.g.
-`POST /sessions`, `POST /purchases`, `GET /inventory`). No framework, no
-build step — same file, new payload shapes.
+## 3. The app (done)
 
-## 4. Queries
+`app/index.html`'s data layer rewritten: the Notion property readers
+(`pTitle`, `pRollNum`, etc.) and `DS_*` data-source constants are gone,
+replaced by a plain `api()` helper hitting the four new routes and flat
+JSON field access. **Behavior change, intentional:** logging a session now
+requires a matching ammo-inventory row for the gun's caliber (blocked
+client-side with a clear message otherwise) — `ammo_stock_id` is `NOT
+NULL`, so this is enforcing at write-time what used to fail silently.
+`ammo_purchases.total_cost` is also `NOT NULL`; the app defaults an
+unentered cost to `0` rather than omitting the field. Copy fixes bundled in
+since this code was already being touched: header subtitle, the Log tab's
+stale "deducts rounds from inventory" footnote, the Guns tab footnote.
 
-Rewrite `sql/*.sql` as plain Postgres against the views above. This is
-strictly simpler than today — no `collection://` prefix, no
-`"date:Date:start"` prefix quirk, and formulas/rollups actually come back
-since they're just views now.
+**App hosting moved from Netlify to Cloudflare Pages** (user's call,
+matching every other project) — reused an existing `range-log-app` Pages
+project rather than creating a new one. `https://range-log-app.pages.dev`
+is now the one canonical URL; the old Netlify URL is retired (left alone,
+not deleted, but no longer functional once the Worker stopped speaking
+Notion's response shape) — this also closes the `docs/backlog.md` item
+about settling on one URL.
 
-## 5. Migration + cutover
+## 4. Queries (done)
 
-1. ~~Stand up the schema in a Supabase project.~~ Done.
-2. ~~One-time export: pull every row from all 4 Notion data sources and
-   insert into the new tables.~~ Done — 372 sessions, 43 purchases, 5
-   firearms, 4 inventory rows. Notion page IDs preserved as `notion_id`
-   rather than discarded (useful for auditing, not just migration plumbing).
-3. ~~Reconcile before cutover.~~ Done — exact match, see Phase 1 results above.
-4. **Not started:** point the Worker at Supabase, redeploy, redeploy the app
-   if endpoint shapes changed.
-5. **Not started:** leave Notion read-only (don't delete) for a few weeks as
-   a backup until confidence is high in the new backend.
+All 6 files in `sql/` rewritten as plain Postgres against the tables/views
+above — no `collection://` prefix, no `"date:Date:start"` quoting, and two
+files (`rounds-by-month.sql`, `maintenance.sql`) got strictly better:
+`date_trunc` handles monthly aggregation in one query instead of a
+downstream step, and the maintenance query joins all guns at once instead
+of the old manual per-gun two-step (real foreign keys make the join
+trivial). Every rewritten query was run once via `execute_sql` to confirm
+it's valid.
 
-## Decisions made when Phase 1 started
+## 5. Cutover (done)
 
-- Notion stays as a read-only historical backup after cutover — not deleted,
-  not decided later.
-- Same Supabase project as your other data (only one exists on the account)
+Verified with a real round-trip before calling it done: `POST /sessions`
+and `POST /purchases` via curl, then the same two writes again through the
+actual deployed UI in a browser (gun/caliber dropdowns populated from live
+data, on-hand numbers updated correctly, Guns tab reflected the new
+session) — all test rows deleted afterward so real data stayed clean.
+Notion is now read-only by consequence, not by a separate action: nothing
+in the Worker talks to it anymore.
+
+## Decisions made along the way
+
+- Notion stays as a read-only historical backup — not deleted.
+- Same Supabase project as the other data (only one exists on the account)
   — no dedicated project.
-- The two known-junk Ammunition Inventory rows were excluded during import
-  rather than cleaned up in Notion first — Notion itself is untouched.
+- The two known-junk Ammunition Inventory rows were excluded during the
+  Phase 1 import rather than cleaned up in Notion first — Notion itself is
+  untouched, start to finish.
+- No dual-write / transition period — full rip-and-replace of the Worker's
+  routing logic, redeploy is the cutover.

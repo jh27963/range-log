@@ -1,131 +1,140 @@
 # Schema
 
-Four databases. Two are append-only fact tables (Sessions, Purchases), two are
-dimension tables (Firearms, Ammunition Inventory) whose interesting columns are
-all derived.
+Live in Supabase (Postgres), project `ywblwmbaiplnphiqzalm`. Full DDL in
+`supabase/schema.sql` — this is the readable version of that.
+
+Four tables. Two are append-only fact tables (`range_sessions`,
+`ammo_purchases`), two are dimension tables (`firearms`,
+`ammunition_inventory`) whose interesting columns are computed by two
+views (`firearms_calc`, `ammunition_inventory_calc`) rather than stored.
 
 ```
                     ┌──────────────────┐
-                    │    Firearms      │
+                    │    firearms      │
                     │  (dimension)     │
                     │                  │
-                    │ Lifetime Rounds ◄┼──┐  rollup
-                    │ Range Trips     ◄┼──┤  rollup
-                    │ Last Fired      ◄┼──┤  rollup
+                    │ lifetime_rounds ◄┼──┐  firearms_calc
+                    │ range_trips    ◄┼──┤  firearms_calc
+                    │ last_fired     ◄┼──┤  firearms_calc
                     └──────────────────┘  │
-                                          │ Gun
+                                          │ firearm_id
                     ┌──────────────────┐  │
-                    │  Range Sessions  ├──┘
+                    │  range_sessions  ├──┘
                     │  (fact, append)  │
                     └────────┬─────────┘
-                             │ Ammo Stock
+                             │ ammo_stock_id
                              ▼
                     ┌──────────────────────┐
-                    │ Ammunition Inventory │
+                    │ ammunition_inventory │
                     │    (dimension)       │
                     │                      │
-                    │ Total Rounds Fired ◄─┤ rollup (from Sessions)
-                    │ Total Purchased    ◄─┤ rollup (from Purchases)
-                    │ Total Spent        ◄─┤ rollup (from Purchases)
-                    │ On Hand (Calc)       │ = Total Purchased − Total Rounds Fired
+                    │ total_rounds_fired ◄─┤ ammunition_inventory_calc
+                    │ total_purchased    ◄─┤ ammunition_inventory_calc
+                    │ total_spent        ◄─┤ ammunition_inventory_calc
+                    │ on_hand              │ = total_purchased − total_rounds_fired
                     └──────────▲───────────┘
-                               │ Stock
+                               │ stock_id
                     ┌──────────┴───────┐
-                    │  Ammo Purchases  │
+                    │  ammo_purchases  │
                     │  (fact, append)  │
                     └──────────────────┘
 ```
 
 ---
 
-## Range Sessions — fact table
+## `range_sessions` — fact table
 
-One row per weapon fired per visit. Shooting three guns on one trip = three rows
-sharing a date.
+One row per weapon fired per visit. Shooting three guns on one trip = three
+rows sharing a date.
 
 | Column | Type | Notes |
 |---|---|---|
-| Firearm | title | Gun name as text. Redundant with the `Gun` relation — kept for display. |
-| Date | date | |
-| Caliber | select | Redundant with the gun's caliber. Denormalized on purpose for easy filtering. |
-| Rounds Fired | number | |
-| Ammo Type | select | FMJ, JHP, Match Grade, Hollow Point, Soft Point, Other |
-| Distance (yds) | number | |
-| Accuracy | select | Excellent, Good, Fair, Poor |
-| Target Type | rich_text | |
-| **Gun** | **relation → Firearms** | **Required.** Drives all Firearms rollups. |
-| **Ammo Stock** | **relation → Ammunition Inventory** | **Required.** Drives `Total Rounds Fired`. |
-| Notes | rich_text | Synthetic rows are tagged `Reconstructed — ...` here. |
+| id | uuid | primary key |
+| notion_id | text | original Notion page ID, nullable — only set on rows migrated from Notion; rows created by the live app have no Notion origin |
+| date | date | |
+| caliber | text | Denormalized — see below |
+| rounds_fired | number | |
+| ammo_type | text | FMJ, JHP, Match Grade, Hollow Point, Soft Point, Other |
+| distance_yds | number | |
+| accuracy | text | Excellent, Good, Fair, Poor |
+| target_type | text | |
+| **firearm_id** | **FK → firearms, NOT NULL** | Drives all `firearms_calc` rollups |
+| **ammo_stock_id** | **FK → ammunition_inventory, NOT NULL** | Drives `total_rounds_fired`. Required — this is the fix for a bug where a session with no ammo relation silently dropped out of every rollup in the Notion version |
+| notes | text | Synthetic backfill rows are tagged `Reconstructed — ...` here |
 
-## Ammo Purchases — fact table
+## `ammo_purchases` — fact table
 
 One row per buy.
 
 | Column | Type | Notes |
 |---|---|---|
-| Purchase | title | e.g. `9mm — 500 rds` |
-| Date | date | |
-| Caliber | select | |
-| Rounds | number | |
-| Total Cost | number | dollars |
-| Cost per Round | formula | `Total Cost / Rounds`, guards div-by-zero |
-| Ammo Type | select | |
-| Brand | rich_text | |
-| Vendor | rich_text | Scheels / Fleet Farm |
-| **Stock** | **relation → Ammunition Inventory** | **Required.** Drives `Total Purchased`. |
-| Notes | rich_text | |
+| id | uuid | primary key |
+| notion_id | text | nullable, same as above |
+| date | date | |
+| caliber | text | |
+| rounds | number | |
+| total_cost | numeric, NOT NULL | dollars — app defaults an unentered cost to 0 |
+| cost_per_round | numeric, generated | `total_cost / rounds`, null-guarded |
+| ammo_type | text | |
+| brand | text | |
+| vendor | text | |
+| **stock_id** | **FK → ammunition_inventory, NOT NULL** | Drives `total_purchased` |
+| notes | text | |
 
-## Ammunition Inventory — dimension
+## `ammunition_inventory` — dimension
 
-One row per caliber. **Never write to this table.** Everything that matters is derived.
+One row per caliber. **Never write to this table directly.** Everything
+that matters is derived by the `ammunition_inventory_calc` view.
 
 | Column | Type | Notes |
 |---|---|---|
-| Caliber | title | |
-| Low-Stock Alert | number | threshold; the only field you'd hand-edit |
-| Total Rounds Fired | rollup | sum of `Rounds Fired` over related Sessions |
-| Total Purchased | rollup | sum of `Rounds` over related Purchases |
-| Total Spent | rollup | sum of `Total Cost` over related Purchases |
-| **On Hand (Calc)** | **formula** | **`Total Purchased − Total Rounds Fired`. This is the stock level.** |
-| Rounds on Hand | number | **DEAD.** Legacy mutable field from before the migration. Delete it. |
-| Sessions | relation | back-ref from Range Sessions |
-| Purchases | relation | back-ref from Ammo Purchases |
-| Notes | rich_text | |
+| id | uuid | primary key |
+| notion_id | text | nullable |
+| caliber | text, NOT NULL | |
+| low_stock_alert | number | threshold; the only field you'd hand-edit |
+| notes | text | |
 
-> There is a stray `.45 ACP` row and an empty untitled row in this table. Neither
-> corresponds to a gun you own. Delete both.
+`ammunition_inventory_calc` adds: `total_rounds_fired` (sum of
+`rounds_fired` over related sessions), `total_purchased` (sum of `rounds`
+over related purchases), `total_spent` (sum of `total_cost`), and
+**`on_hand`** = `total_purchased − total_rounds_fired` — this is the stock
+level, and it is never stored anywhere.
 
-## Firearms — dimension
+## `firearms` — dimension
 
 One row per gun.
 
 | Column | Type | Notes |
 |---|---|---|
-| Firearm | title | |
-| Type | select | Pistol, Revolver, Rifle, Shotgun, AR/Modern Sporting, Rimfire, Other |
-| Caliber | select | |
-| Make | rich_text | |
-| Model | rich_text | |
-| Purchase Date | date | gates the synthetic backfill — a gun can't be fired before you owned it |
-| Last Cleaned | date | pairs with `Last Fired` for a maintenance signal |
-| Lifetime Rounds | rollup | sum of `Rounds Fired` over related Sessions |
-| Range Trips | rollup | count of related Sessions |
-| Last Fired | rollup | latest Session date |
-| Sessions | relation | back-ref |
-| Notes | rich_text | |
+| id | uuid | primary key |
+| notion_id | text | nullable |
+| name | text, NOT NULL | |
+| type | text | Pistol, Revolver, Rifle, Shotgun, AR/Modern Sporting, Rimfire, Other |
+| caliber | text | |
+| make | text | |
+| model | text | |
+| purchase_date | date | gates nothing anymore — was used to gate synthetic backfill generation, which is done |
+| last_cleaned | date | pairs with `last_fired` for a maintenance signal (`sql/maintenance.sql`) |
+
+`firearms_calc` adds: `lifetime_rounds` (sum of `rounds_fired` over related
+sessions), `range_trips` (count of related sessions), `last_fired` (latest
+session date).
 
 ---
 
-## Deliberate denormalizations
+## Deliberate denormalization
 
-Two, both defensible:
+**`caliber` on `range_sessions` and `ammo_purchases`** duplicates the
+caliber implied by the `firearm_id`/`stock_id` relation. Kept because
+filtering/grouping on a plain column is simpler than joining every time,
+and caliber never changes for a given gun or inventory row. Both are
+write-once and set from the same source by the app, so they can't drift in
+practice.
 
-**`Caliber` on Sessions and Purchases** duplicates the caliber implied by the
-relation. Kept because Notion filtering and grouping on a select is far easier
-than traversing a relation, and caliber never changes for a given gun.
+## Row-level security
 
-**`Firearm` title on Sessions** duplicates the `Gun` relation's name. Kept so the
-row has a readable title in list views.
-
-Both are write-once and never updated independently, so they can't drift in
-practice — the app always sets them from the same source.
+RLS is enabled on all four tables with no policies defined — matches every
+other table in this Supabase project. The Worker holds the `service_role`
+key, which bypasses RLS entirely; there's no other consumer of this data
+yet, so no policies are needed. Add policies here if that changes (e.g. a
+second, less-trusted client reading directly).

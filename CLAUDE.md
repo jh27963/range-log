@@ -1,7 +1,10 @@
 # Range Log
 
-Personal shooting-range tracker. Notion is the database; a static HTML app is the
-front end; a Cloudflare Worker sits between them holding the API token.
+Personal shooting-range tracker. Supabase (Postgres) is the database; a static
+HTML app is the front end; a Cloudflare Worker sits between them holding the
+service-role key. Ran on Notion until 2026-07-29 — see
+`docs/supabase-migration.md` for why and how it moved, and the "Legacy"
+section of `docs/ids.md` if you ever need to read the old Notion data.
 
 Owner is a database person — prefers relational thinking, SQL, normalized schemas.
 Talk to him that way. He is comfortable with schema discussions and will push back
@@ -19,18 +22,19 @@ on denormalized designs.
         |  fetch()
         v
   Cloudflare Worker         range-log.jd9hall.workers.dev
-    - holds NOTION_TOKEN as an encrypted secret
-    - adds CORS headers (Notion's API sends none)
-    - allowlists exactly 3 endpoints
+    - holds SUPABASE_SERVICE_KEY as an encrypted secret
+    - adds CORS headers (PostgREST doesn't send them by default)
+    - allowlists exactly 4 endpoints
         |
         v
-  Notion API  (version 2025-09-03)
+  Supabase (PostgREST)
         |
         v
-  4 Notion databases
+  4 Postgres tables + 2 views
 ```
 
-Nothing is bundled or compiled. `app/index.html` is deployed as-is.
+Nothing is bundled or compiled. `app/index.html` is deployed as-is, to
+Cloudflare Pages.
 
 ---
 
@@ -39,58 +43,66 @@ Nothing is bundled or compiled. `app/index.html` is deployed as-is.
 **Two append-only fact tables, one derived balance.**
 
 ```
-Ammo Purchases  ──┐
-                  ├──>  Ammunition Inventory
-Range Sessions  ──┘      On Hand (Calc) = Total Purchased − Total Rounds Fired
+ammo_purchases  ──┐
+                  ├──>  ammunition_inventory
+range_sessions  ──┘      on_hand = total_purchased − total_rounds_fired
 ```
 
 Sessions and Purchases are the only things ever written. Inventory is *never*
-mutated — its stock level is a formula over two rollups. This means the ledger
+mutated — its stock level is a view over two rollups. This means the ledger
 always reconciles and there is a full audit trail.
 
-**This was a deliberate migration.** An earlier version had a mutable
-`Rounds on Hand` number that the app decremented on each session. That is
-denormalized and drifts. Do not reintroduce it. If you find yourself writing a
-`PATCH` against Ammunition Inventory, stop — you are about to undo this.
+**This was a deliberate migration** (twice, now — Notion had already been
+through it once). Do not reintroduce a mutable on-hand number. If you find
+yourself writing an `UPDATE` against `ammunition_inventory`, stop — you are
+about to undo this.
 
 ### Relations are load-bearing
 
-- `Range Sessions.Gun` → Firearms
-- `Range Sessions.Ammo Stock` → Ammunition Inventory
-- `Ammo Purchases.Stock` → Ammunition Inventory
+- `range_sessions.firearm_id` → `firearms`, **NOT NULL**
+- `range_sessions.ammo_stock_id` → `ammunition_inventory`, **NOT NULL**
+- `ammo_purchases.stock_id` → `ammunition_inventory`, **NOT NULL**
 
-Every rollup depends on these. A session row with a blank `Ammo Stock` silently
-drops out of `Total Rounds Fired`, and the inventory number goes quietly wrong.
-Always populate both relations on write.
+Every rollup depends on these. Because they're real foreign keys with `NOT
+NULL`, a write with a missing relation is now rejected at insert time
+instead of silently dropping out of a rollup — the app also validates this
+client-side before it ever calls the Worker (a gun whose caliber has no
+matching inventory row can't be logged, with a clear error instead of a
+failed request).
 
 ---
 
-## Notion API gotchas (each of these broke a build)
+## Working on this
 
-**Data sources, not databases.** As of API version `2025-09-03` you query
-`/v1/data_sources/{id}/query`, not `/v1/databases/{id}/query`. Page creation
-parents onto `{"type":"data_source_id","data_source_id":"..."}`. The database IDs
-and data source IDs are *different UUIDs* — using the wrong one returns
-"Invalid request URL."
+**To query the data:** plain Postgres via the Supabase MCP `execute_sql`
+tool. The `sql/` directory has working examples — start there.
 
-**Formulas and rollups do not come back through SQL.** `On Hand (Calc)`,
-`Lifetime Rounds`, `Total Purchased` etc. return nothing in a
-`notion-query-data-sources` result. Read them via the REST API
-(`properties["X"].formula.number` / `.rollup.number`), or recompute in the query.
+**To change the app:** edit `app/index.html` directly. No build. Redeploy
+with `npx wrangler pages deploy app --project-name=range-log-app`. If you
+add a new Worker endpoint, add it to `ALLOWED` in `worker/worker.js` or it
+403s.
 
-**Date columns in SQL are prefixed:** `"date:Date:start"`, not `"Date"`.
+**To change the schema:** apply DDL via the Supabase MCP `apply_migration`
+tool (or the SQL editor). Update `supabase/schema.sql` and `docs/schema.md`
+in the same commit.
 
-**Rate limits are real.** Bulk writes need ~0.2–0.35s of spacing and retry with
-backoff on 429/5xx. Do not fire hundreds of writes in a tight loop.
+**Secrets:** `SUPABASE_SERVICE_KEY` lives only as an encrypted Worker
+secret, set via `npx wrangler secret put SUPABASE_SERVICE_KEY` from
+`worker/`. It is not in this repo and must never be. If it leaks, rotate it
+in the Supabase dashboard (Settings → API) and update the Worker secret —
+no code change needed. `notion_id` on every table is nullable — only rows
+migrated from Notion have one; don't make it required.
 
 ---
 
 ## History is mostly synthetic
 
-371 of the ~373 session rows are **reconstructed backfill**, tagged in Notes as
-`Reconstructed — auto-generated backfill`. They were generated to a spec (weekly
-visits from Sept 2023, fixed rounds per caliber, ownership-gated) and the purchase
-ledger was sized backward from a real safe count so the balances land on truth.
+Most of the session/purchase rows are **reconstructed backfill** from
+before the Supabase migration, tagged in `notes` as
+`Reconstructed — auto-generated backfill`. They were generated to a spec
+(weekly visits from Sept 2023, fixed rounds per caliber, ownership-gated)
+and the purchase ledger was sized backward from a real safe count so the
+balances land on truth.
 
 The *balances* are real. The *history* is not. Do not draw conclusions from
 accuracy trends or distance distributions over the 2023–2026 window — that is a
@@ -100,7 +112,7 @@ real.
 Filter synthetic rows out with:
 
 ```sql
-WHERE "Notes" NOT LIKE 'Reconstructed%'
+WHERE notes NOT LIKE 'Reconstructed%' OR notes IS NULL
 ```
 
 ---
@@ -109,28 +121,30 @@ WHERE "Notes" NOT LIKE 'Reconstructed%'
 
 ```
 worker/worker.js      the relay. deploy to Cloudflare Workers.
-app/index.html        the whole front end. deploy to any static host.
-sql/*.sql             saved queries, runnable via the Notion MCP
+app/index.html        the whole front end. deploy to Cloudflare Pages.
+supabase/schema.sql   the DDL — tables, views, RLS.
+sql/*.sql             saved queries, plain Postgres
 docs/schema.md        full column-by-column reference
 docs/ids.md           every UUID in one place
 docs/backlog.md       what's next
+docs/supabase-migration.md  how (and why) this moved off Notion
 ```
 
 ---
 
-## Working on this
+## Legacy: Notion API gotchas (kept for anyone reading the old data directly)
 
-**To query the data:** use the Notion MCP tool `notion-query-data-sources`. The
-`sql/` directory has working examples — start there rather than guessing at syntax.
+These applied to the Notion-backed version and are irrelevant to the live
+app/Worker now, but matter if you ever query Notion directly (it's still
+sitting there, read-only, as a backup).
 
-**To change the app:** edit `app/index.html` directly. No build. Redeploy by
-dropping the file on the static host. If you add a new Notion endpoint, you must
-also add it to the Worker's `ALLOWED` allowlist or it will 403.
+**Data sources, not databases.** API version `2025-09-03` queries
+`/v1/data_sources/{id}/query`, not `/v1/databases/{id}/query`.
 
-**To change the schema:** the Notion MCP `notion-update-data-source` tool takes
-SQL-ish DDL (`ADD COLUMN "X" ROLLUP('Relation','Target','sum')`). Update
-`docs/schema.md` in the same commit.
+**Formulas and rollups did not come back through Notion's SQL.** Recompute
+from the fact tables, or read via the REST API's `.formula.number` /
+`.rollup.number`. (Not a concern in Postgres — they're just columns on the
+`_calc` views now.)
 
-**Secrets:** `NOTION_TOKEN` lives only as an encrypted Worker secret. It is not in
-this repo and must never be. If it leaks, rotate at notion.so/my-integrations and
-update the Worker secret — no code change needed.
+**Date columns in Notion SQL were prefixed:** `"date:Date:start"`, not
+`"Date"`.

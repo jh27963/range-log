@@ -1,23 +1,22 @@
--- Recompute on-hand from the fact tables and check it against Notion.
+-- Recompute on-hand straight from the fact tables and compare against
+-- ammunition_inventory_calc.on_hand — they should always agree exactly.
+-- This exists to catch a bug in the view itself, not in the data (there's
+-- no separate Notion formula to distrust anymore).
 --
--- On Hand (Calc) is a formula column in Notion:
---     Total Purchased − Total Rounds Fired
--- Formula columns don't come through SQL, so this rebuilds it from scratch.
--- Run both halves and subtract. They should agree with the app.
---
--- Expected as of the July 2026 backfill:
---   9mm        15650 bought − 15050 fired =  600
---   .380 ACP     950 bought −   700 fired =  250
---   5.56 NATO   1500 bought −   930 fired =  570
---   .22 LR      3750 bought −  3000 fired =  750
+-- Known-good as of the Supabase migration (2026-07-29):
+--   9mm         600
+--   .380 ACP    250
+--   5.56 NATO   570
+--   .22 LR      750
 
--- half 1: purchased
-SELECT "Caliber", SUM("Rounds") AS purchased
-FROM "collection://c7fa221c-d512-43c4-a95f-60853ff68e37"
-GROUP BY "Caliber";
-
--- half 2: fired
-SELECT "Caliber", SUM("Rounds Fired") AS fired
-FROM "collection://4fae7323-f890-47c9-8004-c43c8fb27cac"
-WHERE "Caliber" IS NOT NULL
-GROUP BY "Caliber";
+SELECT
+  i.caliber,
+  COALESCE(p.purchased, 0)                        AS purchased,
+  COALESCE(s.fired, 0)                             AS fired,
+  COALESCE(p.purchased, 0) - COALESCE(s.fired, 0)  AS on_hand
+FROM ammunition_inventory i
+LEFT JOIN (SELECT stock_id, SUM(rounds) AS purchased
+           FROM ammo_purchases GROUP BY stock_id) p ON p.stock_id = i.id
+LEFT JOIN (SELECT ammo_stock_id, SUM(rounds_fired) AS fired
+           FROM range_sessions GROUP BY ammo_stock_id) s ON s.ammo_stock_id = i.id
+ORDER BY i.caliber;

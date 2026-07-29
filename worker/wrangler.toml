@@ -10,4 +10,5 @@ enabled = true
 enabled = true
 
 [vars]
-ALLOWED_ORIGIN = "https://range-log-app-v5.netlify.app"
+ALLOWED_ORIGIN = "https://range-log-app.pages.dev"
+SUPABASE_URL = "https://ywblwmbaiplnphiqzalm.supabase.co"

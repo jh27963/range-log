@@ -1,14 +1,14 @@
 -- Lifetime rounds, trips, and average distance per weapon.
--- Recomputed from the Sessions fact table (the Firearms rollups
--- exist in Notion but are invisible to SQL).
+-- firearms_calc already has these as rollup columns; this recomputes them
+-- directly from the fact table, useful as a cross-check on the view.
 
 SELECT
-  "Firearm",
-  "Caliber",
-  COUNT(*)              AS trips,
-  SUM("Rounds Fired")   AS rounds,
-  AVG("Distance (yds)") AS avg_distance
-FROM "collection://4fae7323-f890-47c9-8004-c43c8fb27cac"
-WHERE "Firearm" IS NOT NULL
-GROUP BY "Firearm", "Caliber"
+  f.name AS firearm,
+  s.caliber,
+  COUNT(*)               AS trips,
+  SUM(s.rounds_fired)    AS rounds,
+  AVG(s.distance_yds)    AS avg_distance
+FROM range_sessions s
+JOIN firearms f ON f.id = s.firearm_id
+GROUP BY f.name, s.caliber
 ORDER BY rounds DESC;

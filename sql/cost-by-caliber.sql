@@ -1,13 +1,13 @@
 -- What each caliber has cost, and the blended price per round.
--- Note: "Cost per Round" exists as a formula column in Notion but
--- does not come through SQL, so it is recomputed here.
+-- ammo_purchases.cost_per_round is per-purchase; this blends across all
+-- purchases in a caliber, which is the number that actually matters.
 
 SELECT
-  "Caliber",
-  COUNT(*)                             AS purchases,
-  SUM("Rounds")                        AS rounds,
-  SUM("Total Cost")                    AS spent,
-  SUM("Total Cost") / SUM("Rounds")    AS cost_per_round
-FROM "collection://c7fa221c-d512-43c4-a95f-60853ff68e37"
-GROUP BY "Caliber"
+  caliber,
+  COUNT(*)                          AS purchases,
+  SUM(rounds)                       AS rounds,
+  SUM(total_cost)                   AS spent,
+  SUM(total_cost) / SUM(rounds)     AS cost_per_round
+FROM ammo_purchases
+GROUP BY caliber
 ORDER BY spent DESC;

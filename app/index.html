@@ -134,7 +134,7 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
   <header>
     <div>
       <h1>Range <span>Log</span></h1>
-      <div class="sub">Notion · Standalone</div>
+      <div class="sub">Supabase · Standalone</div>
     </div>
     <div class="sync" id="syncState">STATUS: <b>CONNECTING…</b></div>
   </header>
@@ -181,7 +181,7 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
       <div class="field"><label class="label" for="fNotes">Notes</label>
         <textarea id="fNotes" rows="3" placeholder="Drills, conditions, observations…"></textarea></div>
       <button type="submit" class="primary" id="saveBtn">Log Session</button>
-      <p class="footnote">Creates a Range Sessions row linked to the gun and caliber, then deducts the rounds from your ammo inventory.</p>
+      <p class="footnote">Creates a Range Sessions row linked to the gun and caliber. On-hand ammo is never stored — it's recomputed as purchased minus fired.</p>
     </form>
   </div>
 
@@ -249,18 +249,13 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
     <span class="label">Registered firearms</span>
     <div id="gunList"><div class="loader"><div class="rings"><div class="dot"></div></div>
       <p>Loading firearms</p></div></div>
-    <p class="footnote">Lifetime rounds and last-fired dates are Notion rollups. Add or edit guns in the Firearms database.</p>
+    <p class="footnote">Lifetime rounds and last-fired dates are computed views in Supabase. Add or edit guns directly in the firearms table.</p>
   </div>
 </div>
 
 <script>
 /* ---------- config ---------- */
 const RELAY = "https://range-log.jd9hall.workers.dev";
-// 2025-09-03 API: query data sources, not databases
-const DS_SESSIONS  = "4fae7323f89047c98004c43c8fb27cac";
-const DS_AMMO      = "40bb29d1af4d4bb09b53c5826f896600";
-const DS_GUNS      = "e850e5dcbf3f43d49a776577c60b5ecb";
-const DS_PURCHASES = "c7fa221cd51243c4a95f60853ff68e37";
 
 let guns = [], ammo = [];
 const $ = id => document.getElementById(id);
@@ -278,8 +273,8 @@ function setSync(txt, ok=true){
   el.innerHTML='STATUS: <b>'+txt+'</b>';
 }
 
-/* ---------- Notion helpers ---------- */
-async function notion(path, method, body){
+/* ---------- Supabase helper ---------- */
+async function api(path, method, body){
   const res = await fetch(RELAY + path, {
     method,
     headers:{"Content-Type":"application/json"},
@@ -292,46 +287,34 @@ async function notion(path, method, body){
   }
   return data;
 }
-// property readers — tolerate empty/missing values
-const pTitle  = p => p && p.title ? p.title.map(t=>t.plain_text).join("") : "";
-const pText   = p => p && p.rich_text ? p.rich_text.map(t=>t.plain_text).join("") : "";
-const pSelect = p => p && p.select ? p.select.name : "";
-const pNum    = p => p && typeof p.number === "number" ? p.number : 0;
-const pRollNum= p => p && p.rollup && typeof p.rollup.number === "number" ? p.rollup.number : 0;
-const pFormNum= p => p && p.formula && typeof p.formula.number === "number" ? p.formula.number : 0;
-const pRollDate= p => {
-  if(!p || !p.rollup) return "";
-  const d = p.rollup.date;
-  return d && d.start ? d.start : "";
-};
 
 /* ---------- load ---------- */
 async function loadData(){
   setSync("SYNCING…");
   try{
     const [gRes, aRes] = await Promise.all([
-      notion(`/v1/data_sources/${DS_GUNS}/query`, "POST", {page_size:100}),
-      notion(`/v1/data_sources/${DS_AMMO}/query`, "POST", {page_size:100})
+      api('/firearms', "GET"),
+      api('/inventory', "GET")
     ]);
 
-    guns = gRes.results.map(pg=>({
-      id: pg.id,
-      name: pTitle(pg.properties["Firearm"]),
-      caliber: pSelect(pg.properties["Caliber"]),
-      type: pSelect(pg.properties["Type"]),
-      lifetime: pRollNum(pg.properties["Lifetime Rounds"]),
-      trips: pRollNum(pg.properties["Range Trips"]),
-      last: pRollDate(pg.properties["Last Fired"])
+    guns = gRes.map(g=>({
+      id: g.id,
+      name: g.name,
+      caliber: g.caliber || "",
+      type: g.type || "",
+      lifetime: g.lifetime_rounds || 0,
+      trips: g.range_trips || 0,
+      last: g.last_fired || ""
     })).filter(g=>g.name);
 
-    ammo = aRes.results.map(pg=>({
-      id: pg.id,
-      caliber: pTitle(pg.properties["Caliber"]),
-      onHand: pFormNum(pg.properties["On Hand (Calc)"]),
-      threshold: pNum(pg.properties["Low-Stock Alert"]),
-      purchased: pRollNum(pg.properties["Total Purchased"]),
-      fired: pRollNum(pg.properties["Total Rounds Fired"]),
-      spent: pRollNum(pg.properties["Total Spent"])
+    ammo = aRes.map(a=>({
+      id: a.id,
+      caliber: a.caliber,
+      onHand: a.on_hand || 0,
+      threshold: a.low_stock_alert || 0,
+      purchased: a.total_purchased || 0,
+      fired: a.total_rounds_fired || 0,
+      spent: a.total_spent || 0
     })).filter(a=>a.caliber);
 
     renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns();
@@ -341,12 +324,12 @@ async function loadData(){
   }catch(e){
     console.error(e);
     setSync("OFFLINE", false);
-    const hint = /Could not find|not_found/i.test(e.message)
-      ? "The integration can't see your databases. In Notion, open the Range Log page → ••• → Connections → connect \"Range Log App\"."
-      : /unauthorized|API token/i.test(e.message)
-      ? "Notion rejected the token. Check the NOTION_TOKEN secret on your Worker."
+    const hint = /apikey|JWT|service_role/i.test(e.message)
+      ? "Supabase rejected the request. Check the SUPABASE_SERVICE_KEY secret on your Worker."
+      : /SUPABASE_URL/i.test(e.message)
+      ? "The Worker isn't configured — SUPABASE_URL or SUPABASE_SERVICE_KEY is missing."
       : e.message;
-    const html = `<div class="err-detail">Couldn't reach Notion.<br><br><code>${hint}</code></div>`;
+    const html = `<div class="err-detail">Couldn't reach Supabase.<br><br><code>${hint}</code></div>`;
     $('logLoader').innerHTML = html;
     $('invList').innerHTML = html;
     $('gunList').innerHTML = html;
@@ -399,23 +382,19 @@ $('buyForm').addEventListener('submit', async e=>{
   const btn=$('buyBtn');
   btn.disabled=true; btn.textContent='SAVING…';
   try{
-    const props = {
-      "Purchase": { title:[{ text:{ content: `${cal} — ${rounds} rds` } }] },
-      "Date":     { date:{ start: $('bDate').value } },
-      "Caliber":  { select:{ name: cal } },
-      "Rounds":   { number: rounds },
-      "Stock":    { relation:[{ id: stockId }] }
+    const body = {
+      stock_id: stockId,
+      date: $('bDate').value,
+      caliber: cal,
+      rounds: rounds,
+      total_cost: isNaN(cost) ? 0 : cost  // total_cost is NOT NULL — unknown cost is recorded as 0
     };
-    if(!isNaN(cost))       props["Total Cost"] = { number: cost };
-    if($('bType').value)   props["Ammo Type"]  = { select:{ name:$('bType').value } };
-    if($('bBrand').value)  props["Brand"]      = { rich_text:[{ text:{ content:$('bBrand').value } }] };
-    if($('bVendor').value) props["Vendor"]     = { rich_text:[{ text:{ content:$('bVendor').value } }] };
-    if($('bNotes').value)  props["Notes"]      = { rich_text:[{ text:{ content:$('bNotes').value } }] };
+    if($('bType').value)    body.ammo_type  = $('bType').value;
+    if($('bBrand').value)   body.brand      = $('bBrand').value;
+    if($('bVendor').value)  body.vendor     = $('bVendor').value;
+    if($('bNotes').value)   body.notes      = $('bNotes').value;
 
-    await notion("/v1/pages", "POST", {
-      parent:{ type:"data_source_id", data_source_id: DS_PURCHASES },
-      properties: props
-    });
+    await api("/purchases", "POST", body);
 
     await loadData();  // re-read so the derived on-hand reflects the new purchase
 
@@ -503,33 +482,34 @@ $('logForm').addEventListener('submit', async e=>{
 
   const g = guns[gi];
   const stock = ammo.find(a=>a.caliber === g.caliber);
-  const newCount = stock ? Math.max(0, stock.onHand - rounds) : null;
+  // Ammo Stock is a required relation now — a gun whose caliber has no
+  // matching inventory row can't be logged, rather than silently saving
+  // a session that drops out of every rollup.
+  if(!stock){
+    flash(`No ammo inventory tracked for ${g.caliber || 'this gun’s caliber'}. Add an inventory row first.`, false);
+    return;
+  }
 
   const btn=$('saveBtn');
   btn.disabled=true; btn.textContent='SAVING…';
 
   try{
-    // 1. create the session row
-    const props = {
-      "Firearm":      { title:[{ text:{ content:g.name } }] },
-      "Date":         { date:{ start:$('fDate').value } },
-      "Rounds Fired": { number: rounds },
-      "Gun":          { relation:[{ id:g.id }] }
+    const body = {
+      firearm_id: g.id,
+      ammo_stock_id: stock.id,
+      date: $('fDate').value,
+      rounds_fired: rounds,
+      caliber: g.caliber || null
     };
-    if(g.caliber)          props["Caliber"]        = { select:{ name:g.caliber } };
-    if($('fAmmoType').value) props["Ammo Type"]    = { select:{ name:$('fAmmoType').value } };
-    if($('fDist').value)   props["Distance (yds)"] = { number: parseInt($('fDist').value) };
-    if($('fAcc').value)    props["Accuracy"]       = { select:{ name:$('fAcc').value } };
-    if($('fTarget').value) props["Target Type"]    = { rich_text:[{ text:{ content:$('fTarget').value } }] };
-    if($('fNotes').value)  props["Notes"]          = { rich_text:[{ text:{ content:$('fNotes').value } }] };
-    if(stock)              props["Ammo Stock"]     = { relation:[{ id:stock.id }] };
+    if($('fAmmoType').value) body.ammo_type   = $('fAmmoType').value;
+    if($('fDist').value)     body.distance_yds = parseInt($('fDist').value);
+    if($('fAcc').value)      body.accuracy    = $('fAcc').value;
+    if($('fTarget').value)   body.target_type = $('fTarget').value;
+    if($('fNotes').value)    body.notes       = $('fNotes').value;
 
-    await notion("/v1/pages", "POST", {
-      parent:{ type:"data_source_id", data_source_id: DS_SESSIONS },
-      properties: props
-    });
+    await api("/sessions", "POST", body);
 
-    // No inventory write. On Hand (Calc) = Total Purchased − Total Rounds Fired,
+    // No inventory write. on_hand = total_purchased − total_rounds_fired,
     // so creating the session row is the only mutation needed. Re-read to confirm.
     await loadData();
 

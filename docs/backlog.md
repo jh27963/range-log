@@ -5,15 +5,29 @@ page in Notion. Keep them roughly in sync, or pick one as canonical and delete t
 
 ## Cleanup (do first — these are small and they're actively wrong)
 
+- [x] Fix the `ALLOWED_ORIGIN` typo on the Worker so the CORS lock actually works.
+- [x] Retire old Netlify deploys (v2, v4, `ranng-log-app`). Settle on one URL —
+      done via the Supabase migration: the app now lives on Cloudflare Pages
+      at `range-log-app.pages.dev`, the one canonical URL.
+- [x] Log tab footnote still says it "deducts rounds from inventory." Fixed
+      in the same migration, since that code was already being touched.
 - [ ] Delete the dead `Rounds on Hand` column on Ammunition Inventory.
-      Rename `On Hand (Calc)` → `Rounds on Hand` to take its place.
+      Rename `On Hand (Calc)` → `Rounds on Hand` to take its place. **Moot** —
+      this was Notion-only, and Notion is now a read-only backup, not part
+      of the live path. Only matters if you're cleaning up the backup itself.
 - [ ] Delete the `.45 ACP` inventory row (no such gun) and the empty untitled row.
-- [ ] Fix the `ALLOWED_ORIGIN` typo on the Worker so the CORS lock actually works.
+      **Moot for the live app** — these were already excluded when the data
+      moved to Supabase (see `docs/supabase-migration.md`). Only matters for
+      the Notion backup itself.
 - [ ] Link the 2026-07-09 Canik session to its Ammo Stock row — it predates the
-      relation, which is why 9mm reads 600 instead of 650.
-- [ ] Retire old Netlify deploys (v2, v4, `ranng-log-app`). Settle on one URL.
-- [ ] Log tab footnote still says it "deducts rounds from inventory." It doesn't
-      anymore — the model is derived. Fix the copy.
+      relation, which is why 9mm reads 600 instead of 650. **Unverified as of
+      the Supabase migration** — that session's row was found with both `Gun`
+      and `Ammo Stock` already populated during extraction, so either this was
+      already fixed in Notion before the migration or the note is stale.
+      The migrated Supabase data reflects whatever Notion had at migration
+      time (9mm on-hand reconciled to 600, matching `sql/inventory-reconcile.sql`).
+      If 650 is actually correct, it needs a manual correction in Supabase now,
+      not in Notion.
 
 ## Drill-down by weapon (the next real feature)
 
