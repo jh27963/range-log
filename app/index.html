@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Range Log">
+<meta name="theme-color" content="#171b21">
+<title>Range Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --steel-900:#171b21; --steel-850:#1c222a;
+  --steel-700:#2c3540; --steel-600:#3a4552;
+  --brass:#c9a24b; --brass-bright:#e2bc63;
+  --safety:#ff6a2b; --ok:#8fae62;
+  --paper:#e9e5da; --muted:#8b95a1;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:'Barlow',sans-serif;background:var(--steel-900);color:var(--paper);
+  min-height:100vh;font-size:16px;
+  padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));
+}
+.shell{max-width:720px;margin:0 auto}
+
+header{
+  border:1px solid var(--steel-600);border-bottom:3px solid var(--brass);
+  background:var(--steel-850);padding:16px 18px 12px;
+  display:flex;justify-content:space-between;align-items:flex-end;gap:10px;
+}
+h1{font-family:'Archivo Narrow',sans-serif;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;font-size:1.35em;line-height:1}
+h1 span{color:var(--brass)}
+.sub{font-size:.68em;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+.sync{font-family:'IBM Plex Mono',monospace;font-size:.66em;letter-spacing:.06em;
+  color:var(--muted);text-align:right;white-space:nowrap}
+.sync b{color:var(--ok);font-weight:600}
+.sync.err b{color:var(--safety)}
+
+.tabs{display:flex;border:1px solid var(--steel-600);border-top:none;background:var(--steel-850)}
+.tab{flex:1;padding:13px 4px;background:none;border:none;cursor:pointer;
+  font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:.82em;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+  border-bottom:3px solid transparent}
+.tab.active{color:var(--brass-bright);border-bottom-color:var(--brass)}
+.tab:focus-visible{outline:2px solid var(--brass);outline-offset:-2px}
+
+.pane{display:none;border:1px solid var(--steel-600);border-top:none;
+  background:var(--steel-850);padding:20px 18px}
+.pane.active{display:block}
+.label{display:block;font-family:'Archivo Narrow',sans-serif;font-weight:600;
+  font-size:.7em;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+input,select,textarea{width:100%;padding:11px 12px;background:var(--steel-900);
+  border:1px solid var(--steel-600);color:var(--paper);
+  font-family:'Barlow',sans-serif;font-size:16px;border-radius:2px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brass)}
+input[type=number]{font-family:'IBM Plex Mono',monospace}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.field{margin-bottom:12px}
+.row .field{margin-bottom:0}
+
+button.primary{width:100%;padding:15px;background:var(--brass);color:var(--steel-900);
+  border:none;cursor:pointer;font-family:'Archivo Narrow',sans-serif;font-weight:700;
+  font-size:1em;letter-spacing:.2em;text-transform:uppercase;border-radius:2px}
+button.primary:active{background:var(--brass-bright)}
+button.primary:disabled{background:var(--steel-600);color:var(--muted)}
+button.ghost{background:none;border:1px solid var(--steel-600);color:var(--muted);
+  padding:8px 14px;cursor:pointer;font-family:'Archivo Narrow',sans-serif;
+  letter-spacing:.14em;text-transform:uppercase;font-size:.72em;border-radius:2px}
+button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
+
+.strip{margin-bottom:14px;padding:11px 12px;border-left:3px solid var(--safety);
+  background:rgba(255,106,43,.08);font-size:.88em;display:none;line-height:1.45}
+.strip.ok{border-left-color:var(--ok);background:rgba(143,174,98,.08)}
+.strip b{font-family:'IBM Plex Mono',monospace}
+
+.ammo-row{padding:13px 0;border-bottom:1px solid var(--steel-700)}
+.ammo-row:last-child{border-bottom:none}
+.ammo-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:8px}
+.cal{font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:1.02em;
+  letter-spacing:.08em;text-transform:uppercase}
+.count{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:1em;
+  color:var(--brass-bright);white-space:nowrap}
+.count small{color:var(--muted);font-weight:500;font-size:.68em;letter-spacing:.08em}
+.magbar{display:flex;gap:3px;height:12px}
+.ledger{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;
+  font-family:'IBM Plex Mono',monospace;font-size:.68em;
+  color:var(--muted);letter-spacing:.04em}
+.seg{flex:1;background:var(--steel-700);border-radius:1px}
+.seg.full{background:var(--brass)}
+.seg.low{background:var(--safety)}
+.badge{font-family:'IBM Plex Mono',monospace;font-size:.6em;letter-spacing:.12em;
+  padding:2px 7px;border-radius:2px;margin-left:7px;vertical-align:middle}
+.badge.out{background:var(--safety);color:var(--steel-900)}
+.badge.low{border:1px solid var(--safety);color:var(--safety)}
+.badge.ok{border:1px solid var(--ok);color:var(--ok)}
+
+.gun-row{padding:13px 0;border-bottom:1px solid var(--steel-700);
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gun-row:last-child{border-bottom:none}
+.gun-name{font-weight:600}
+.gun-meta{font-size:.8em;color:var(--muted);margin-top:2px}
+.gun-stat{font-family:'IBM Plex Mono',monospace;font-size:.8em;
+  color:var(--brass-bright);text-align:right;white-space:nowrap}
+.gun-stat small{display:block;color:var(--muted);letter-spacing:.1em;font-size:.78em}
+
+.loader{display:flex;flex-direction:column;align-items:center;padding:40px 0;gap:14px}
+.rings{width:50px;height:50px;position:relative}
+.rings::before,.rings::after{content:"";position:absolute;inset:0;
+  border:2px solid var(--steel-600);border-radius:50%}
+.rings::after{inset:11px;border-color:var(--brass);animation:pulse 1.2s ease-in-out infinite}
+.rings .dot{position:absolute;inset:22px;background:var(--safety);border-radius:50%;
+  animation:pulse 1.2s ease-in-out infinite reverse}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.loader p{font-family:'IBM Plex Mono',monospace;font-size:.72em;letter-spacing:.14em;
+  color:var(--muted);text-transform:uppercase;text-align:center;padding:0 20px;line-height:1.6}
+@media(prefers-reduced-motion:reduce){.rings::after,.rings .dot{animation:none}}
+
+.empty{color:var(--muted);text-align:center;padding:28px 0;font-size:.9em;line-height:1.6}
+.footnote{font-size:.72em;color:var(--muted);margin-top:14px;line-height:1.6}
+.err-detail{color:var(--safety);font-size:.85em;line-height:1.6;padding:20px 0;text-align:center}
+.err-detail code{font-family:'IBM Plex Mono',monospace;font-size:.9em;
+  background:var(--steel-900);padding:2px 6px;border-radius:2px;color:var(--paper)}
+@media(max-width:520px){.row{grid-template-columns:1fr}
+  header{flex-direction:column;align-items:flex-start}.sync{text-align:left}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <h1>Range <span>Log</span></h1>
+      <div class="sub">Notion · Standalone</div>
+    </div>
+    <div class="sync" id="syncState">STATUS: <b>CONNECTING…</b></div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" onclick="showPane('log',this)">Log</button>
+    <button class="tab" role="tab" onclick="showPane('buy',this)">Buy</button>
+    <button class="tab" role="tab" onclick="showPane('inv',this)">Ammo</button>
+    <button class="tab" role="tab" onclick="showPane('guns',this)">Guns</button>
+  </div>
+
+  <div class="pane active" id="pane-log">
+    <div class="strip" id="logStrip"></div>
+    <div id="logLoader" class="loader">
+      <div class="rings"><div class="dot"></div></div>
+      <p>Loading guns &amp; ammo</p>
+    </div>
+    <form id="logForm" style="display:none" novalidate>
+      <div class="row">
+        <div class="field"><label class="label" for="fDate">Date</label>
+          <input type="date" id="fDate" required></div>
+        <div class="field"><label class="label" for="fGun">Gun</label>
+          <select id="fGun" required></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="fRounds">Rounds Fired</label>
+          <input type="number" id="fRounds" min="1" inputmode="numeric" placeholder="0" required></div>
+        <div class="field"><label class="label" for="fAmmoType">Ammo Type</label>
+          <select id="fAmmoType">
+            <option value="">—</option><option>FMJ</option><option>JHP</option>
+            <option>Match Grade</option><option>Hollow Point</option>
+            <option>Soft Point</option><option>Other</option>
+          </select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="fDist">Distance (yds)</label>
+          <input type="number" id="fDist" min="0" inputmode="numeric" placeholder="—"></div>
+        <div class="field"><label class="label" for="fAcc">Accuracy</label>
+          <select id="fAcc"><option value="">—</option><option>Excellent</option>
+            <option>Good</option><option>Fair</option><option>Poor</option></select></div>
+      </div>
+      <div class="field"><label class="label" for="fTarget">Target Type</label>
+        <input type="text" id="fTarget" placeholder="Paper, steel, silhouette…"></div>
+      <div class="field"><label class="label" for="fNotes">Notes</label>
+        <textarea id="fNotes" rows="3" placeholder="Drills, conditions, observations…"></textarea></div>
+      <button type="submit" class="primary" id="saveBtn">Log Session</button>
+      <p class="footnote">Creates a Range Sessions row linked to the gun and caliber, then deducts the rounds from your ammo inventory.</p>
+    </form>
+  </div>
+
+  <div class="pane" id="pane-buy">
+    <div class="strip" id="buyStrip"></div>
+    <div id="buyLoader" class="loader">
+      <div class="rings"><div class="dot"></div></div>
+      <p>Loading calibers</p>
+    </div>
+    <form id="buyForm" style="display:none" novalidate>
+      <div class="row">
+        <div class="field"><label class="label" for="bDate">Date</label>
+          <input type="date" id="bDate" required></div>
+        <div class="field"><label class="label" for="bCal">Caliber</label>
+          <select id="bCal" required></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="bBoxes">Boxes</label>
+          <input type="number" id="bBoxes" min="1" value="1" inputmode="numeric"></div>
+        <div class="field"><label class="label" for="bPerBox">Rounds / Box</label>
+          <input type="number" id="bPerBox" min="1" value="50" inputmode="numeric"></div>
+      </div>
+      <div class="field">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span class="label" style="margin:0">Total Rounds</span>
+          <span id="bTotalRds" style="font-family:'IBM Plex Mono',monospace;
+            font-size:1.15em;color:var(--brass-bright);font-weight:600">50</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="bCost">Total Cost ($)</label>
+          <input type="number" id="bCost" min="0" step="0.01" inputmode="decimal" placeholder="—"></div>
+        <div class="field"><label class="label" for="bType">Ammo Type</label>
+          <select id="bType">
+            <option value="">—</option><option>FMJ</option><option>JHP</option>
+            <option>Match Grade</option><option>Hollow Point</option>
+            <option>Soft Point</option><option>Other</option>
+          </select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="bBrand">Brand</label>
+          <input type="text" id="bBrand" placeholder="Federal, Blazer…"></div>
+        <div class="field"><label class="label" for="bVendor">Vendor</label>
+          <input type="text" id="bVendor" placeholder="Where you bought it"></div>
+      </div>
+      <div class="field"><label class="label" for="bNotes">Notes</label>
+        <textarea id="bNotes" rows="2" placeholder="Sale price, bulk deal, first time trying this load…"></textarea></div>
+      <button type="submit" class="primary" id="buyBtn">Add Purchase</button>
+      <p class="footnote">Appends a row to Ammo Purchases. On-hand counts recompute as purchased minus fired — no manual adjustment.</p>
+    </form>
+  </div>
+
+  <div class="pane" id="pane-inv">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <span class="label" style="margin:0">Rounds on hand</span>
+      <button class="ghost" onclick="loadData()">Refresh</button>
+    </div>
+    <div id="invTotal" style="font-family:'IBM Plex Mono',monospace;font-size:1.55em;
+      color:var(--brass-bright);margin-bottom:8px"></div>
+    <div id="invList"><div class="loader"><div class="rings"><div class="dot"></div></div>
+      <p>Loading inventory</p></div></div>
+  </div>
+
+  <div class="pane" id="pane-guns">
+    <span class="label">Registered firearms</span>
+    <div id="gunList"><div class="loader"><div class="rings"><div class="dot"></div></div>
+      <p>Loading firearms</p></div></div>
+    <p class="footnote">Lifetime rounds and last-fired dates are Notion rollups. Add or edit guns in the Firearms database.</p>
+  </div>
+</div>
+
+<script>
+/* ---------- config ---------- */
+const RELAY = "https://range-log.jd9hall.workers.dev";
+// 2025-09-03 API: query data sources, not databases
+const DS_SESSIONS  = "4fae7323f89047c98004c43c8fb27cac";
+const DS_AMMO      = "40bb29d1af4d4bb09b53c5826f896600";
+const DS_GUNS      = "e850e5dcbf3f43d49a776577c60b5ecb";
+const DS_PURCHASES = "c7fa221cd51243c4a95f60853ff68e37";
+
+let guns = [], ammo = [];
+const $ = id => document.getElementById(id);
+$('fDate').valueAsDate = new Date();
+
+function showPane(name, btn){
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  $('pane-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+function setSync(txt, ok=true){
+  const el=$('syncState');
+  el.classList.toggle('err',!ok);
+  el.innerHTML='STATUS: <b>'+txt+'</b>';
+}
+
+/* ---------- Notion helpers ---------- */
+async function notion(path, method, body){
+  const res = await fetch(RELAY + path, {
+    method,
+    headers:{"Content-Type":"application/json"},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok){
+    const msg = data.message || data.error || ("HTTP "+res.status);
+    throw new Error(msg);
+  }
+  return data;
+}
+// property readers — tolerate empty/missing values
+const pTitle  = p => p && p.title ? p.title.map(t=>t.plain_text).join("") : "";
+const pText   = p => p && p.rich_text ? p.rich_text.map(t=>t.plain_text).join("") : "";
+const pSelect = p => p && p.select ? p.select.name : "";
+const pNum    = p => p && typeof p.number === "number" ? p.number : 0;
+const pRollNum= p => p && p.rollup && typeof p.rollup.number === "number" ? p.rollup.number : 0;
+const pFormNum= p => p && p.formula && typeof p.formula.number === "number" ? p.formula.number : 0;
+const pRollDate= p => {
+  if(!p || !p.rollup) return "";
+  const d = p.rollup.date;
+  return d && d.start ? d.start : "";
+};
+
+/* ---------- load ---------- */
+async function loadData(){
+  setSync("SYNCING…");
+  try{
+    const [gRes, aRes] = await Promise.all([
+      notion(`/v1/data_sources/${DS_GUNS}/query`, "POST", {page_size:100}),
+      notion(`/v1/data_sources/${DS_AMMO}/query`, "POST", {page_size:100})
+    ]);
+
+    guns = gRes.results.map(pg=>({
+      id: pg.id,
+      name: pTitle(pg.properties["Firearm"]),
+      caliber: pSelect(pg.properties["Caliber"]),
+      type: pSelect(pg.properties["Type"]),
+      lifetime: pRollNum(pg.properties["Lifetime Rounds"]),
+      trips: pRollNum(pg.properties["Range Trips"]),
+      last: pRollDate(pg.properties["Last Fired"])
+    })).filter(g=>g.name);
+
+    ammo = aRes.results.map(pg=>({
+      id: pg.id,
+      caliber: pTitle(pg.properties["Caliber"]),
+      onHand: pFormNum(pg.properties["On Hand (Calc)"]),
+      threshold: pNum(pg.properties["Low-Stock Alert"]),
+      purchased: pRollNum(pg.properties["Total Purchased"]),
+      fired: pRollNum(pg.properties["Total Rounds Fired"]),
+      spent: pRollNum(pg.properties["Total Spent"])
+    })).filter(a=>a.caliber);
+
+    renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns();
+    $('logLoader').style.display='none';
+    $('logForm').style.display='block';
+    setSync("SYNCED "+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  }catch(e){
+    console.error(e);
+    setSync("OFFLINE", false);
+    const hint = /Could not find|not_found/i.test(e.message)
+      ? "The integration can't see your databases. In Notion, open the Range Log page → ••• → Connections → connect \"Range Log App\"."
+      : /unauthorized|API token/i.test(e.message)
+      ? "Notion rejected the token. Check the NOTION_TOKEN secret on your Worker."
+      : e.message;
+    const html = `<div class="err-detail">Couldn't reach Notion.<br><br><code>${hint}</code></div>`;
+    $('logLoader').innerHTML = html;
+    $('invList').innerHTML = html;
+    $('gunList').innerHTML = html;
+  }
+}
+
+/* ---------- render ---------- */
+function renderGunSelect(){
+  $('fGun').innerHTML = '<option value="">— Select gun —</option>' +
+    guns.map((g,i)=>`<option value="${i}">${g.name}${g.caliber?' ('+g.caliber+')':''}</option>`).join('');
+}
+
+/* ---------- purchases ---------- */
+$('bDate').valueAsDate = new Date();
+
+function renderBuySelect(){
+  $('bCal').innerHTML = '<option value="">— Select caliber —</option>' +
+    ammo.slice().sort((a,b)=>a.caliber.localeCompare(b.caliber))
+      .map(a=>`<option value="${a.id}" data-cal="${a.caliber}">${a.caliber}</option>`).join('');
+  $('buyLoader').style.display='none';
+  $('buyForm').style.display='block';
+}
+
+function updateBuyTotal(){
+  const boxes = parseInt($('bBoxes').value) || 0;
+  const per   = parseInt($('bPerBox').value) || 0;
+  const total = boxes * per;
+  $('bTotalRds').textContent = total.toLocaleString();
+  const cost = parseFloat($('bCost').value);
+  if(total > 0 && cost > 0){
+    const cpr = (cost/total).toFixed(3);
+    $('bTotalRds').textContent = total.toLocaleString() + '  ·  $' + cpr + '/rd';
+  }
+}
+['bBoxes','bPerBox','bCost'].forEach(id=>{
+  $(id).addEventListener('input', updateBuyTotal);
+});
+
+$('buyForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const stockId = $('bCal').value;
+  const boxes = parseInt($('bBoxes').value) || 0;
+  const per   = parseInt($('bPerBox').value) || 0;
+  const rounds = boxes * per;
+  if(!stockId || rounds < 1){ flashBuy('Pick a caliber and enter a quantity.', false); return; }
+
+  const cal = $('bCal').selectedOptions[0].dataset.cal;
+  const cost = parseFloat($('bCost').value);
+
+  const btn=$('buyBtn');
+  btn.disabled=true; btn.textContent='SAVING…';
+  try{
+    const props = {
+      "Purchase": { title:[{ text:{ content: `${cal} — ${rounds} rds` } }] },
+      "Date":     { date:{ start: $('bDate').value } },
+      "Caliber":  { select:{ name: cal } },
+      "Rounds":   { number: rounds },
+      "Stock":    { relation:[{ id: stockId }] }
+    };
+    if(!isNaN(cost))       props["Total Cost"] = { number: cost };
+    if($('bType').value)   props["Ammo Type"]  = { select:{ name:$('bType').value } };
+    if($('bBrand').value)  props["Brand"]      = { rich_text:[{ text:{ content:$('bBrand').value } }] };
+    if($('bVendor').value) props["Vendor"]     = { rich_text:[{ text:{ content:$('bVendor').value } }] };
+    if($('bNotes').value)  props["Notes"]      = { rich_text:[{ text:{ content:$('bNotes').value } }] };
+
+    await notion("/v1/pages", "POST", {
+      parent:{ type:"data_source_id", data_source_id: DS_PURCHASES },
+      properties: props
+    });
+
+    await loadData();  // re-read so the derived on-hand reflects the new purchase
+
+    const now = ammo.find(a=>a.id===stockId);
+    flashBuy(`Added <b>${rounds.toLocaleString()}</b> rds of ${cal}.` +
+      (now ? ` On hand → <b>${now.onHand.toLocaleString()}</b>.` : ''), true);
+    $('buyForm').reset();
+    $('bDate').valueAsDate = new Date();
+    $('bBoxes').value = 1; $('bPerBox').value = 50;
+    updateBuyTotal();
+  }catch(err){
+    console.error(err);
+    flashBuy('Purchase not saved. '+err.message, false);
+  }finally{
+    btn.disabled=false; btn.textContent='Add Purchase';
+  }
+});
+
+function flashBuy(html, ok){
+  const s=$('buyStrip');
+  s.className = 'strip' + (ok?' ok':'');
+  s.style.display='block';
+  s.innerHTML=html;
+  clearTimeout(flashBuy._t);
+  flashBuy._t=setTimeout(()=>{ s.style.display='none'; }, 7000);
+}
+
+function renderInventory(){
+  if(!ammo.length){
+    $('invList').innerHTML='<div class="empty">No calibers tracked yet.</div>';
+    $('invTotal').textContent=''; return;
+  }
+  const total = ammo.reduce((s,a)=>s+a.onHand,0);
+  $('invTotal').innerHTML = total.toLocaleString() +
+    ' <small style="font-size:.48em;color:var(--muted);letter-spacing:.15em">TOTAL ROUNDS</small>';
+  $('invList').innerHTML = ammo.slice().sort((a,b)=>a.onHand-b.onHand).map(a=>{
+    const on=a.onHand, th=a.threshold;
+    const state = on<=0 ? 'out' : (th>0 && on<=th ? 'low' : 'ok');
+    const cap = Math.max(on, th*2, 100);
+    const filled = Math.round(Math.min(on/cap,1)*10);
+    const segs = Array.from({length:10},(_,i)=>
+      `<div class="seg ${i<filled?(state==='ok'?'full':'low'):''}"></div>`).join('');
+    const badge = state==='out' ? '<span class="badge out">OUT</span>'
+                : state==='low' ? '<span class="badge low">LOW</span>'
+                : '<span class="badge ok">OK</span>';
+    return `<div class="ammo-row">
+      <div class="ammo-head">
+        <span class="cal">${a.caliber}${badge}</span>
+        <span class="count">${on.toLocaleString()} <small>RDS${th?' · ALERT '+th:''}</small></span>
+      </div>
+      <div class="magbar">${segs}</div>
+      <div class="ledger">
+        <span>+${a.purchased.toLocaleString()} bought</span>
+        <span>−${a.fired.toLocaleString()} fired</span>
+        ${a.spent>0?`<span>$${a.spent.toFixed(2)} spent</span>`:''}
+        ${a.spent>0&&a.purchased>0?`<span>$${(a.spent/a.purchased).toFixed(3)}/rd</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderGuns(){
+  if(!guns.length){
+    $('gunList').innerHTML='<div class="empty">No firearms registered yet.</div>'; return;
+  }
+  $('gunList').innerHTML = guns.map(g=>{
+    const last = g.last ? new Date(g.last+'T00:00:00').toLocaleDateString([], {month:'short',day:'numeric'}) : '—';
+    return `<div class="gun-row">
+      <div>
+        <div class="gun-name">${g.name}</div>
+        <div class="gun-meta">${[g.type,g.caliber].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="gun-stat">${g.lifetime.toLocaleString()} rds
+        <small>LAST ${last}</small></div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- log a session ---------- */
+$('logForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const gi = $('fGun').value;
+  const rounds = parseInt($('fRounds').value);
+  if(gi==='' || !rounds || rounds<1){ flash('Pick a gun and enter rounds fired.', false); return; }
+
+  const g = guns[gi];
+  const stock = ammo.find(a=>a.caliber === g.caliber);
+  const newCount = stock ? Math.max(0, stock.onHand - rounds) : null;
+
+  const btn=$('saveBtn');
+  btn.disabled=true; btn.textContent='SAVING…';
+
+  try{
+    // 1. create the session row
+    const props = {
+      "Firearm":      { title:[{ text:{ content:g.name } }] },
+      "Date":         { date:{ start:$('fDate').value } },
+      "Rounds Fired": { number: rounds },
+      "Gun":          { relation:[{ id:g.id }] }
+    };
+    if(g.caliber)          props["Caliber"]        = { select:{ name:g.caliber } };
+    if($('fAmmoType').value) props["Ammo Type"]    = { select:{ name:$('fAmmoType').value } };
+    if($('fDist').value)   props["Distance (yds)"] = { number: parseInt($('fDist').value) };
+    if($('fAcc').value)    props["Accuracy"]       = { select:{ name:$('fAcc').value } };
+    if($('fTarget').value) props["Target Type"]    = { rich_text:[{ text:{ content:$('fTarget').value } }] };
+    if($('fNotes').value)  props["Notes"]          = { rich_text:[{ text:{ content:$('fNotes').value } }] };
+    if(stock)              props["Ammo Stock"]     = { relation:[{ id:stock.id }] };
+
+    await notion("/v1/pages", "POST", {
+      parent:{ type:"data_source_id", data_source_id: DS_SESSIONS },
+      properties: props
+    });
+
+    // No inventory write. On Hand (Calc) = Total Purchased − Total Rounds Fired,
+    // so creating the session row is the only mutation needed. Re-read to confirm.
+    await loadData();
+
+    flash(`Logged <b>${rounds}</b> rds through ${g.name}.` +
+      (stock ? ` ${g.caliber} on hand → <b>${(stock.onHand - rounds).toLocaleString()}</b>.` : ''), true);
+    $('logForm').reset();
+    $('fDate').valueAsDate = new Date();
+  }catch(err){
+    console.error(err);
+    flash('Save failed — nothing was written. '+err.message, false);
+  }finally{
+    btn.disabled=false; btn.textContent='Log Session';
+  }
+});
+
+function flash(html, ok){
+  const s=$('logStrip');
+  s.className = 'strip' + (ok?' ok':'');
+  s.style.display='block';
+  s.innerHTML=html;
+  clearTimeout(flash._t);
+  flash._t=setTimeout(()=>{ s.style.display='none'; }, 7000);
+}
+
+loadData();
+</script>
+</body>
+</html>

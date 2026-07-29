@@ -1,0 +1,11 @@
+# never commit the token
+.env
+.dev.vars
+*.secret
+
+# cloudflare
+.wrangler/
+node_modules/
+
+# os
+.DS_Store
