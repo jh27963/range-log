@@ -25,7 +25,7 @@ body{
   min-height:100vh;font-size:16px;
   padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));
 }
-.shell{max-width:720px;margin:0 auto}
+.shell{max-width:720px;margin:0 auto;padding-bottom:92px}
 
 header{
   border:1px solid var(--steel-600);border-bottom:3px solid var(--brass);
@@ -41,12 +41,17 @@ h1 span{color:var(--brass)}
 .sync b{color:var(--ok);font-weight:600}
 .sync.err b{color:var(--safety)}
 
-.tabs{display:flex;border:1px solid var(--steel-600);border-top:none;background:var(--steel-850)}
-.tab{flex:1;padding:13px 4px;background:none;border:none;cursor:pointer;
-  font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:.82em;
-  letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
-  border-bottom:3px solid transparent}
-.tab.active{color:var(--brass-bright);border-bottom-color:var(--brass)}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:720px;z-index:10;
+  display:flex;border:1px solid var(--steel-600);border-bottom:none;
+  background:var(--steel-850);padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 4px 8px;background:none;border:none;cursor:pointer;
+  font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:.66em;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  border-top:3px solid transparent}
+.tab svg{width:20px;height:20px;stroke:currentColor;flex-shrink:0}
+.tab.active{color:var(--brass-bright);border-top-color:var(--brass)}
 .tab:focus-visible{outline:2px solid var(--brass);outline-offset:-2px}
 
 .pane{display:none;border:1px solid var(--steel-600);border-top:none;
@@ -108,6 +113,16 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
   color:var(--brass-bright);text-align:right;white-space:nowrap}
 .gun-stat small{display:block;color:var(--muted);letter-spacing:.1em;font-size:.78em}
 
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.stat-card{background:var(--steel-900);border:1px solid var(--steel-600);
+  border-radius:2px;padding:14px 14px 12px}
+.stat-card .num{font-family:'IBM Plex Mono',monospace;font-size:1.5em;
+  font-weight:600;color:var(--brass-bright);line-height:1.1}
+.stat-card .lbl{font-size:.66em;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-top:4px}
+.dash-line{padding:11px 0;border-bottom:1px solid var(--steel-700);font-size:.92em}
+.dash-line:last-child{border-bottom:none}
+
 .loader{display:flex;flex-direction:column;align-items:center;padding:40px 0;gap:14px}
 .rings{width:50px;height:50px;position:relative}
 .rings::before,.rings::after{content:"";position:absolute;inset:0;
@@ -140,13 +155,46 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
   </header>
 
   <div class="tabs" role="tablist">
-    <button class="tab active" role="tab" onclick="showPane('log',this)">Log</button>
-    <button class="tab" role="tab" onclick="showPane('buy',this)">Buy</button>
-    <button class="tab" role="tab" onclick="showPane('inv',this)">Ammo</button>
-    <button class="tab" role="tab" onclick="showPane('guns',this)">Guns</button>
+    <button class="tab active" role="tab" onclick="showPane('dash',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/>
+        <rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>
+      </svg>Dash</button>
+    <button class="tab" role="tab" onclick="showPane('log',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8">
+        <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>
+        <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/>
+      </svg>Log</button>
+    <button class="tab" role="tab" onclick="showPane('buy',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-.59 1.41l-8 8a2 2 0 0 1-2.82 0l-6-6a2 2 0 0 1 0-2.82l8-8A2 2 0 0 1 12 2z"/>
+        <circle cx="16.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/>
+      </svg>Buy</button>
+    <button class="tab" role="tab" onclick="showPane('inv',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3h4l2 3v13a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V6z"/><line x1="6" y1="9" x2="16" y2="9"/>
+      </svg>Ammo</button>
+    <button class="tab" role="tab" onclick="showPane('guns',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2.5 14.5h11v-3h5.5a1.5 1.5 0 0 1 1.5 1.5v1.5h-2.5v4h-3v-4h-6v4h-3v-4h-3z"/>
+      </svg>Guns</button>
   </div>
 
-  <div class="pane active" id="pane-log">
+  <div class="pane active" id="pane-dash">
+    <div id="dashLoader" class="loader">
+      <div class="rings"><div class="dot"></div></div>
+      <p>Loading overview</p>
+    </div>
+    <div id="dashContent" style="display:none">
+      <div class="stat-grid" id="statGrid"></div>
+      <span class="label">Last activity</span>
+      <div id="dashLast"></div>
+      <span class="label" style="display:block;margin-top:16px">Needs attention</span>
+      <div id="dashAlerts"></div>
+    </div>
+  </div>
+
+  <div class="pane" id="pane-log">
     <div class="strip" id="logStrip"></div>
     <div id="logLoader" class="loader">
       <div class="rings"><div class="dot"></div></div>
@@ -317,7 +365,7 @@ async function loadData(){
       spent: a.total_spent || 0
     })).filter(a=>a.caliber);
 
-    renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns();
+    renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns(); renderDashboard();
     $('logLoader').style.display='none';
     $('logForm').style.display='block';
     setSync("SYNCED "+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
@@ -330,6 +378,7 @@ async function loadData(){
       ? "The Worker isn't configured — SUPABASE_URL or SUPABASE_SERVICE_KEY is missing."
       : e.message;
     const html = `<div class="err-detail">Couldn't reach Supabase.<br><br><code>${hint}</code></div>`;
+    $('dashLoader').innerHTML = html;
     $('logLoader').innerHTML = html;
     $('invList').innerHTML = html;
     $('gunList').innerHTML = html;
@@ -471,6 +520,38 @@ function renderGuns(){
         <small>LAST ${last}</small></div>
     </div>`;
   }).join('');
+}
+
+function renderDashboard(){
+  $('dashLoader').style.display='none';
+  $('dashContent').style.display='block';
+
+  const onHand   = ammo.reduce((s,a)=>s+a.onHand,0);
+  const fired    = ammo.reduce((s,a)=>s+a.fired,0);
+  const spent    = ammo.reduce((s,a)=>s+a.spent,0);
+
+  $('statGrid').innerHTML = [
+    ['Rounds On Hand', onHand.toLocaleString()],
+    ['Lifetime Fired', fired.toLocaleString()],
+    ['Total Spent', '$'+spent.toFixed(2)],
+    ['Guns · Calibers', guns.length + ' · ' + ammo.length]
+  ].map(([lbl,num])=>`<div class="stat-card"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`).join('');
+
+  const lastGun = guns.slice().filter(g=>g.last).sort((a,b)=>b.last.localeCompare(a.last))[0];
+  $('dashLast').innerHTML = lastGun
+    ? `<div class="dash-line">${lastGun.name} <span style="color:var(--muted)">· ${new Date(lastGun.last+'T00:00:00').toLocaleDateString([], {month:'short',day:'numeric',year:'numeric'})}</span></div>`
+    : `<div class="empty">No sessions logged yet.</div>`;
+
+  const attention = ammo.filter(a=>{
+    const state = a.onHand<=0 ? 'out' : (a.threshold>0 && a.onHand<=a.threshold ? 'low' : 'ok');
+    return state !== 'ok';
+  });
+  $('dashAlerts').innerHTML = attention.length
+    ? attention.map(a=>{
+        const badge = a.onHand<=0 ? '<span class="badge out">OUT</span>' : '<span class="badge low">LOW</span>';
+        return `<div class="dash-line">${a.caliber}${badge} <span style="color:var(--muted)">· ${a.onHand.toLocaleString()} rds on hand</span></div>`;
+      }).join('')
+    : `<div class="empty">All calibers OK.</div>`;
 }
 
 /* ---------- log a session ---------- */
