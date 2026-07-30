@@ -6,18 +6,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Range Log">
-<meta name="theme-color" content="#171b21">
+<meta name="theme-color" content="#1a1613">
 <title>Range Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --steel-900:#171b21; --steel-850:#1c222a;
-  --steel-700:#2c3540; --steel-600:#3a4552;
-  --brass:#c9a24b; --brass-bright:#e2bc63;
-  --safety:#ff6a2b; --ok:#8fae62;
-  --paper:#e9e5da; --muted:#8b95a1;
+  --steel-900:#1a1613; --steel-850:#221d18;
+  --steel-700:#362f27; --steel-600:#453c31;
+  --brass:#c9a25a; --brass-bright:#e3bd6b;
+  --safety:#d97a4d; --ok:#93b378;
+  --paper:#e8e2d4; --muted:#a89d8b;
+  --shadow:0 3px 14px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.025) inset;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{
@@ -25,43 +26,42 @@ body{
   min-height:100vh;font-size:16px;
   padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));
 }
-.shell{max-width:720px;margin:0 auto;padding-bottom:92px}
+.shell{max-width:720px;margin:0 auto;padding-bottom:96px}
 
 header{
-  border:1px solid var(--steel-600);border-bottom:3px solid var(--brass);
-  background:var(--steel-850);padding:16px 18px 12px;
+  background:var(--steel-850);box-shadow:var(--shadow);border-radius:16px;
+  padding:16px 18px 12px;margin-bottom:14px;
   display:flex;justify-content:space-between;align-items:flex-end;gap:10px;
 }
-h1{font-family:'Archivo Narrow',sans-serif;font-weight:700;letter-spacing:.14em;
+h1{font-family:'Archivo Narrow',sans-serif;font-weight:700;letter-spacing:.05em;
   text-transform:uppercase;font-size:1.35em;line-height:1}
 h1 span{color:var(--brass)}
-.sub{font-size:.68em;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-top:5px}
-.sync{font-family:'IBM Plex Mono',monospace;font-size:.66em;letter-spacing:.06em;
+.sub{font-size:.7em;letter-spacing:.03em;color:var(--muted);margin-top:5px}
+.sync{font-family:'IBM Plex Mono',monospace;font-size:.66em;letter-spacing:.02em;
   color:var(--muted);text-align:right;white-space:nowrap}
 .sync b{color:var(--ok);font-weight:600}
 .sync.err b{color:var(--safety)}
 
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
-  width:100%;max-width:720px;z-index:10;
-  display:flex;border:1px solid var(--steel-600);border-bottom:none;
-  background:var(--steel-850);padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.tabs{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));left:50%;
+  transform:translateX(-50%);width:calc(100% - 24px);max-width:696px;z-index:10;
+  display:flex;background:var(--steel-850);box-shadow:var(--shadow);
+  border-radius:16px;padding:6px}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:10px 4px 8px;background:none;border:none;cursor:pointer;
-  font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:.66em;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
-  border-top:3px solid transparent}
+  padding:8px 4px;background:none;border:none;cursor:pointer;border-radius:10px;
+  font-family:'Barlow',sans-serif;font-weight:600;font-size:.66em;
+  letter-spacing:.02em;color:var(--muted)}
 .tab svg{width:20px;height:20px;stroke:currentColor;flex-shrink:0}
-.tab.active{color:var(--brass-bright);border-top-color:var(--brass)}
+.tab.active{color:var(--brass-bright);background:rgba(201,162,90,.14)}
 .tab:focus-visible{outline:2px solid var(--brass);outline-offset:-2px}
 
-.pane{display:none;border:1px solid var(--steel-600);border-top:none;
-  background:var(--steel-850);padding:20px 18px}
+.pane{display:none;background:var(--steel-850);box-shadow:var(--shadow);
+  border-radius:16px;padding:20px 18px;margin-top:14px}
 .pane.active{display:block}
-.label{display:block;font-family:'Archivo Narrow',sans-serif;font-weight:600;
-  font-size:.7em;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.label{display:block;font-family:'Barlow',sans-serif;font-weight:600;
+  font-size:.78em;color:var(--muted);margin-bottom:6px}
 input,select,textarea{width:100%;padding:11px 12px;background:var(--steel-900);
   border:1px solid var(--steel-600);color:var(--paper);
-  font-family:'Barlow',sans-serif;font-size:16px;border-radius:2px}
+  font-family:'Barlow',sans-serif;font-size:16px;border-radius:10px}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brass)}
 input[type=number]{font-family:'IBM Plex Mono',monospace}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
@@ -69,58 +69,56 @@ input[type=number]{font-family:'IBM Plex Mono',monospace}
 .row .field{margin-bottom:0}
 
 button.primary{width:100%;padding:15px;background:var(--brass);color:var(--steel-900);
-  border:none;cursor:pointer;font-family:'Archivo Narrow',sans-serif;font-weight:700;
-  font-size:1em;letter-spacing:.2em;text-transform:uppercase;border-radius:2px}
+  border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;
+  font-size:1em;border-radius:12px}
 button.primary:active{background:var(--brass-bright)}
 button.primary:disabled{background:var(--steel-600);color:var(--muted)}
 button.ghost{background:none;border:1px solid var(--steel-600);color:var(--muted);
-  padding:8px 14px;cursor:pointer;font-family:'Archivo Narrow',sans-serif;
-  letter-spacing:.14em;text-transform:uppercase;font-size:.72em;border-radius:2px}
+  padding:8px 14px;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600;
+  font-size:.78em;border-radius:10px}
 button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
 
 .strip{margin-bottom:14px;padding:11px 12px;border-left:3px solid var(--safety);
-  background:rgba(255,106,43,.08);font-size:.88em;display:none;line-height:1.45}
-.strip.ok{border-left-color:var(--ok);background:rgba(143,174,98,.08)}
+  background:rgba(217,122,77,.1);font-size:.88em;display:none;line-height:1.45;
+  border-radius:8px}
+.strip.ok{border-left-color:var(--ok);background:rgba(147,179,120,.1)}
 .strip b{font-family:'IBM Plex Mono',monospace}
 
-.ammo-row{padding:13px 0;border-bottom:1px solid var(--steel-700)}
+.ammo-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .ammo-row:last-child{border-bottom:none}
 .ammo-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:8px}
-.cal{font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:1.02em;
-  letter-spacing:.08em;text-transform:uppercase}
+.cal{font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:1.05em}
 .count{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:1em;
   color:var(--brass-bright);white-space:nowrap}
-.count small{color:var(--muted);font-weight:500;font-size:.68em;letter-spacing:.08em}
+.count small{color:var(--muted);font-weight:500;font-size:.68em}
 .magbar{display:flex;gap:3px;height:12px}
 .ledger{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;
-  font-family:'IBM Plex Mono',monospace;font-size:.68em;
-  color:var(--muted);letter-spacing:.04em}
-.seg{flex:1;background:var(--steel-700);border-radius:1px}
+  font-family:'IBM Plex Mono',monospace;font-size:.68em;color:var(--muted)}
+.seg{flex:1;background:var(--steel-600);border-radius:3px}
 .seg.full{background:var(--brass)}
 .seg.low{background:var(--safety)}
-.badge{font-family:'IBM Plex Mono',monospace;font-size:.6em;letter-spacing:.12em;
-  padding:2px 7px;border-radius:2px;margin-left:7px;vertical-align:middle}
+.badge{font-family:'Barlow',sans-serif;font-weight:600;font-size:.66em;
+  padding:2px 9px;border-radius:20px;margin-left:7px;vertical-align:middle}
 .badge.out{background:var(--safety);color:var(--steel-900)}
-.badge.low{border:1px solid var(--safety);color:var(--safety)}
-.badge.ok{border:1px solid var(--ok);color:var(--ok)}
+.badge.low{background:rgba(217,122,77,.16);color:var(--safety)}
+.badge.ok{background:rgba(147,179,120,.16);color:var(--ok)}
 
-.gun-row{padding:13px 0;border-bottom:1px solid var(--steel-700);
+.gun-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);
   display:flex;justify-content:space-between;align-items:center;gap:10px}
 .gun-row:last-child{border-bottom:none}
 .gun-name{font-weight:600}
 .gun-meta{font-size:.8em;color:var(--muted);margin-top:2px}
 .gun-stat{font-family:'IBM Plex Mono',monospace;font-size:.8em;
   color:var(--brass-bright);text-align:right;white-space:nowrap}
-.gun-stat small{display:block;color:var(--muted);letter-spacing:.1em;font-size:.78em}
+.gun-stat small{display:block;color:var(--muted);font-size:.78em;font-weight:400}
 
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
-.stat-card{background:var(--steel-900);border:1px solid var(--steel-600);
-  border-radius:2px;padding:14px 14px 12px}
+.stat-card{background:var(--steel-900);box-shadow:var(--shadow);
+  border-radius:14px;padding:14px 14px 12px}
 .stat-card .num{font-family:'IBM Plex Mono',monospace;font-size:1.5em;
   font-weight:600;color:var(--brass-bright);line-height:1.1}
-.stat-card .lbl{font-size:.66em;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--muted);margin-top:4px}
-.dash-line{padding:11px 0;border-bottom:1px solid var(--steel-700);font-size:.92em}
+.stat-card .lbl{font-size:.74em;color:var(--muted);margin-top:4px}
+.dash-line{padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.92em}
 .dash-line:last-child{border-bottom:none}
 
 .loader{display:flex;flex-direction:column;align-items:center;padding:40px 0;gap:14px}
@@ -131,15 +129,15 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
 .rings .dot{position:absolute;inset:22px;background:var(--safety);border-radius:50%;
   animation:pulse 1.2s ease-in-out infinite reverse}
 @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
-.loader p{font-family:'IBM Plex Mono',monospace;font-size:.72em;letter-spacing:.14em;
-  color:var(--muted);text-transform:uppercase;text-align:center;padding:0 20px;line-height:1.6}
+.loader p{font-family:'Barlow',sans-serif;font-size:.8em;letter-spacing:.02em;
+  color:var(--muted);text-align:center;padding:0 20px;line-height:1.6}
 @media(prefers-reduced-motion:reduce){.rings::after,.rings .dot{animation:none}}
 
 .empty{color:var(--muted);text-align:center;padding:28px 0;font-size:.9em;line-height:1.6}
 .footnote{font-size:.72em;color:var(--muted);margin-top:14px;line-height:1.6}
 .err-detail{color:var(--safety);font-size:.85em;line-height:1.6;padding:20px 0;text-align:center}
 .err-detail code{font-family:'IBM Plex Mono',monospace;font-size:.9em;
-  background:var(--steel-900);padding:2px 6px;border-radius:2px;color:var(--paper)}
+  background:var(--steel-900);padding:2px 6px;border-radius:6px;color:var(--paper)}
 @media(max-width:520px){.row{grid-template-columns:1fr}
   header{flex-direction:column;align-items:flex-start}.sync{text-align:left}}
 </style>
@@ -151,7 +149,7 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
       <h1>Range <span>Log</span></h1>
       <div class="sub">Supabase · Standalone</div>
     </div>
-    <div class="sync" id="syncState">STATUS: <b>CONNECTING…</b></div>
+    <div class="sync" id="syncState">Status: <b>Connecting…</b></div>
   </header>
 
   <div class="tabs" role="tablist">
@@ -323,7 +321,7 @@ function showPane(name, btn){
 function setSync(txt, ok=true){
   const el=$('syncState');
   el.classList.toggle('err',!ok);
-  el.innerHTML='STATUS: <b>'+txt+'</b>';
+  el.innerHTML='Status: <b>'+txt+'</b>';
 }
 
 /* ---------- Supabase helper ---------- */
@@ -360,7 +358,7 @@ function monthlyBuckets(rows){
 
 /* ---------- load ---------- */
 async function loadData(){
-  setSync("SYNCING…");
+  setSync("Syncing…");
   try{
     const [gRes, aRes, sRes] = await Promise.all([
       api('/firearms', "GET"),
@@ -394,10 +392,10 @@ async function loadData(){
     renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns(); renderDashboard();
     $('logLoader').style.display='none';
     $('logForm').style.display='block';
-    setSync("SYNCED "+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+    setSync("Synced "+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
   }catch(e){
     console.error(e);
-    setSync("OFFLINE", false);
+    setSync("Offline", false);
     const hint = /apikey|JWT|service_role/i.test(e.message)
       ? "Supabase rejected the request. Check the SUPABASE_SERVICE_KEY secret on your Worker."
       : /SUPABASE_URL/i.test(e.message)
@@ -455,7 +453,7 @@ $('buyForm').addEventListener('submit', async e=>{
   const cost = parseFloat($('bCost').value);
 
   const btn=$('buyBtn');
-  btn.disabled=true; btn.textContent='SAVING…';
+  btn.disabled=true; btn.textContent='Saving…';
   try{
     const body = {
       stock_id: stockId,
@@ -504,7 +502,7 @@ function renderInventory(){
   }
   const total = ammo.reduce((s,a)=>s+a.onHand,0);
   $('invTotal').innerHTML = total.toLocaleString() +
-    ' <small style="font-size:.48em;color:var(--muted);letter-spacing:.15em">TOTAL ROUNDS</small>';
+    ' <small style="font-size:.48em;color:var(--muted)">Total rounds</small>';
   $('invList').innerHTML = ammo.slice().sort((a,b)=>a.onHand-b.onHand).map(a=>{
     const on=a.onHand, th=a.threshold;
     const state = on<=0 ? 'out' : (th>0 && on<=th ? 'low' : 'ok');
@@ -519,7 +517,7 @@ function renderInventory(){
     return `<div class="ammo-row">
       <div class="ammo-head">
         <span class="cal">${a.caliber}${badge}</span>
-        <span class="count">${on.toLocaleString()} <small>RDS${th?' · ALERT '+th:''}</small></span>
+        <span class="count">${on.toLocaleString()} <small>rds${th?' · alert '+th:''}</small></span>
       </div>
       <div class="magbar">${segs}</div>
       <div class="ledger" style="justify-content:space-between;align-items:center">
@@ -549,7 +547,7 @@ function renderGuns(){
       </div>
       ${spark}
       <div class="gun-stat">${g.lifetime.toLocaleString()} rds
-        <small>LAST ${last}</small></div>
+        <small>Last ${last}</small></div>
     </div>`;
   }).join('');
 }
@@ -641,7 +639,7 @@ $('logForm').addEventListener('submit', async e=>{
   }
 
   const btn=$('saveBtn');
-  btn.disabled=true; btn.textContent='SAVING…';
+  btn.disabled=true; btn.textContent='Saving…';
 
   try{
     const body = {
