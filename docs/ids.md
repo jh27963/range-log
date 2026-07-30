@@ -14,6 +14,7 @@ Allowlisted endpoints (anything else 403s):
 |---|---|---|
 | GET | `/firearms` | `firearms_calc` view |
 | GET | `/inventory` | `ammunition_inventory_calc` view |
+| GET | `/sessions` | `range_sessions` table (raw `date`,`rounds_fired` — client buckets by month for the Dashboard chart) |
 | POST | `/sessions` | `range_sessions` table |
 | POST | `/purchases` | `ammo_purchases` table |
 

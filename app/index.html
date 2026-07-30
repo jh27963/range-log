@@ -191,6 +191,11 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
       <div id="dashLast"></div>
       <span class="label" style="display:block;margin-top:16px">Needs attention</span>
       <div id="dashAlerts"></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:16px">
+        <span class="label" style="margin:0">Rounds per month</span>
+        <span id="historyTotal" style="font-family:'IBM Plex Mono',monospace;font-size:.8em;color:var(--muted)"></span>
+      </div>
+      <div id="historyChart"></div>
     </div>
   </div>
 
@@ -305,7 +310,7 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
 /* ---------- config ---------- */
 const RELAY = "https://range-log.jd9hall.workers.dev";
 
-let guns = [], ammo = [];
+let guns = [], ammo = [], monthlyRounds = [];
 const $ = id => document.getElementById(id);
 $('fDate').valueAsDate = new Date();
 
@@ -340,9 +345,10 @@ async function api(path, method, body){
 async function loadData(){
   setSync("SYNCING…");
   try{
-    const [gRes, aRes] = await Promise.all([
+    const [gRes, aRes, sRes] = await Promise.all([
       api('/firearms', "GET"),
-      api('/inventory', "GET")
+      api('/inventory', "GET"),
+      api('/sessions', "GET")
     ]);
 
     guns = gRes.map(g=>({
@@ -364,6 +370,19 @@ async function loadData(){
       fired: a.total_rounds_fired || 0,
       spent: a.total_spent || 0
     })).filter(a=>a.caliber);
+
+    // Bucket by calendar month, last 12 months ending this month. Built
+    // from the month keys first (not just the months present in sRes) so
+    // a month with zero sessions still shows as a zero bar — a gap in the
+    // timeline is meaningful here, not just absent data.
+    const byMonth = {};
+    sRes.forEach(s=>{ const k=s.date.slice(0,7); byMonth[k]=(byMonth[k]||0)+s.rounds_fired; });
+    const now = new Date();
+    monthlyRounds = Array.from({length:12},(_,i)=>{
+      const d = new Date(now.getFullYear(), now.getMonth()-(11-i), 1);
+      const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      return { key, label: d.toLocaleDateString([], {month:'short'}), rounds: byMonth[key]||0 };
+    });
 
     renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns(); renderDashboard();
     $('logLoader').style.display='none';
@@ -552,6 +571,30 @@ function renderDashboard(){
         return `<div class="dash-line">${a.caliber}${badge} <span style="color:var(--muted)">· ${a.onHand.toLocaleString()} rds on hand</span></div>`;
       }).join('')
     : `<div class="empty">All calibers OK.</div>`;
+
+  const total = monthlyRounds.reduce((s,m)=>s+m.rounds,0);
+  $('historyTotal').textContent = total.toLocaleString()+' last 12 mo';
+  $('historyChart').innerHTML = total
+    ? svgBarChart(monthlyRounds)
+    : `<div class="empty">No session history yet.</div>`;
+}
+
+// Simple hand-rolled bar chart, no library — bar height proportional to
+// the max in the window, a month label under every 3rd bar (all 12 would
+// crowd at this width).
+function svgBarChart(months){
+  const W=340, H=90, gap=4, barW=(W-gap*11)/12, max=Math.max(...months.map(m=>m.rounds),1);
+  const bars = months.map((m,i)=>{
+    const h = Math.max(2, Math.round((m.rounds/max)*(H-16)));
+    const x = i*(barW+gap);
+    return `<rect x="${x}" y="${H-h}" width="${barW}" height="${h}" fill="var(--brass)" rx="1"/>`;
+  }).join('');
+  const labels = months.map((m,i)=>{
+    if(i%3!==0) return '';
+    const x = i*(barW+gap)+barW/2;
+    return `<text x="${x}" y="${H+13}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="var(--muted)">${m.label}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H+18}" width="100%" style="display:block;overflow:visible">${bars}${labels}</svg>`;
 }
 
 /* ---------- log a session ---------- */

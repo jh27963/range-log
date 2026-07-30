@@ -14,15 +14,19 @@
 const ALLOWED = [
   { method: "GET",  path: "/firearms" },
   { method: "GET",  path: "/inventory" },
+  { method: "GET",  path: "/sessions" },
   { method: "POST", path: "/sessions" },
   { method: "POST", path: "/purchases" },
 ];
 
-// Route -> PostgREST resource. GET routes read the `_calc` views (rollups
-// computed as real columns); POST routes insert into the base tables.
+// Route -> PostgREST resource. GET /firearms and /inventory read the
+// `_calc` views (rollups computed as real columns); GET /sessions reads
+// raw history for the Dashboard chart (client buckets it, no server-side
+// aggregation needed for one chart); POST routes insert into base tables.
 const TARGET = {
   "GET /firearms":  "firearms_calc?select=*",
   "GET /inventory": "ammunition_inventory_calc?select=*",
+  "GET /sessions":  "range_sessions?select=date,rounds_fired&order=date.asc",
   "POST /sessions":  "range_sessions",
   "POST /purchases": "ammo_purchases",
 };
