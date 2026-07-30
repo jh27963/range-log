@@ -310,7 +310,7 @@ button.ghost:active{border-color:var(--brass);color:var(--brass-bright)}
 /* ---------- config ---------- */
 const RELAY = "https://range-log.jd9hall.workers.dev";
 
-let guns = [], ammo = [], monthlyRounds = [];
+let guns = [], ammo = [], monthlyRounds = [], sessionRows = [];
 const $ = id => document.getElementById(id);
 $('fDate').valueAsDate = new Date();
 
@@ -339,6 +339,23 @@ async function api(path, method, body){
     throw new Error(msg);
   }
   return data;
+}
+
+// Last 12 calendar months ending this month, as {key,label,rounds}[].
+// Built from the month keys first (not just months present in `rows`) so
+// a month with zero matching sessions still shows as a zero bar — a gap
+// in the timeline is meaningful (no trips that month), not just missing
+// data. Takes any subset of sessionRows — used for the all-up Dashboard
+// total and, filtered, for a single gun's or caliber's own trend.
+function monthlyBuckets(rows){
+  const byMonth = {};
+  rows.forEach(s=>{ const k=s.date.slice(0,7); byMonth[k]=(byMonth[k]||0)+s.rounds_fired; });
+  const now = new Date();
+  return Array.from({length:12},(_,i)=>{
+    const d = new Date(now.getFullYear(), now.getMonth()-(11-i), 1);
+    const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    return { key, label: d.toLocaleDateString([], {month:'short'}), rounds: byMonth[key]||0 };
+  });
 }
 
 /* ---------- load ---------- */
@@ -371,18 +388,8 @@ async function loadData(){
       spent: a.total_spent || 0
     })).filter(a=>a.caliber);
 
-    // Bucket by calendar month, last 12 months ending this month. Built
-    // from the month keys first (not just the months present in sRes) so
-    // a month with zero sessions still shows as a zero bar — a gap in the
-    // timeline is meaningful here, not just absent data.
-    const byMonth = {};
-    sRes.forEach(s=>{ const k=s.date.slice(0,7); byMonth[k]=(byMonth[k]||0)+s.rounds_fired; });
-    const now = new Date();
-    monthlyRounds = Array.from({length:12},(_,i)=>{
-      const d = new Date(now.getFullYear(), now.getMonth()-(11-i), 1);
-      const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      return { key, label: d.toLocaleDateString([], {month:'short'}), rounds: byMonth[key]||0 };
-    });
+    sessionRows = sRes;
+    monthlyRounds = monthlyBuckets(sessionRows);
 
     renderGunSelect(); renderBuySelect(); renderInventory(); renderGuns(); renderDashboard();
     $('logLoader').style.display='none';
@@ -508,17 +515,21 @@ function renderInventory(){
     const badge = state==='out' ? '<span class="badge out">OUT</span>'
                 : state==='low' ? '<span class="badge low">LOW</span>'
                 : '<span class="badge ok">OK</span>';
+    const spark = svgSparkline(monthlyBuckets(sessionRows.filter(r=>r.caliber===a.caliber)));
     return `<div class="ammo-row">
       <div class="ammo-head">
         <span class="cal">${a.caliber}${badge}</span>
         <span class="count">${on.toLocaleString()} <small>RDS${th?' · ALERT '+th:''}</small></span>
       </div>
       <div class="magbar">${segs}</div>
-      <div class="ledger">
-        <span>+${a.purchased.toLocaleString()} bought</span>
-        <span>−${a.fired.toLocaleString()} fired</span>
-        ${a.spent>0?`<span>$${a.spent.toFixed(2)} spent</span>`:''}
-        ${a.spent>0&&a.purchased>0?`<span>$${(a.spent/a.purchased).toFixed(3)}/rd</span>`:''}
+      <div class="ledger" style="justify-content:space-between;align-items:center">
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <span>+${a.purchased.toLocaleString()} bought</span>
+          <span>−${a.fired.toLocaleString()} fired</span>
+          ${a.spent>0?`<span>$${a.spent.toFixed(2)} spent</span>`:''}
+          ${a.spent>0&&a.purchased>0?`<span>$${(a.spent/a.purchased).toFixed(3)}/rd</span>`:''}
+        </div>
+        ${spark}
       </div>
     </div>`;
   }).join('');
@@ -530,11 +541,13 @@ function renderGuns(){
   }
   $('gunList').innerHTML = guns.map(g=>{
     const last = g.last ? new Date(g.last+'T00:00:00').toLocaleDateString([], {month:'short',day:'numeric'}) : '—';
+    const spark = svgSparkline(monthlyBuckets(sessionRows.filter(r=>r.firearm_id===g.id)));
     return `<div class="gun-row">
       <div>
         <div class="gun-name">${g.name}</div>
         <div class="gun-meta">${[g.type,g.caliber].filter(Boolean).join(' · ')}</div>
       </div>
+      ${spark}
       <div class="gun-stat">${g.lifetime.toLocaleString()} rds
         <small>LAST ${last}</small></div>
     </div>`;
@@ -595,6 +608,19 @@ function svgBarChart(months){
     return `<text x="${x}" y="${H+13}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="9" fill="var(--muted)">${m.label}</text>`;
   }).join('');
   return `<svg viewBox="0 0 ${W} ${H+18}" width="100%" style="display:block;overflow:visible">${bars}${labels}</svg>`;
+}
+
+// Tiny unlabeled sparkline variant for a single gun/caliber row — same
+// last-12-months shape as svgBarChart, no month labels (too small to fit),
+// flat zero-line for a row with no history yet rather than omitting it.
+function svgSparkline(months){
+  const W=140, H=22, gap=1.5, barW=(W-gap*11)/12, max=Math.max(...months.map(m=>m.rounds),1);
+  const bars = months.map((m,i)=>{
+    const h = Math.max(1, Math.round((m.rounds/max)*(H-2)));
+    const x = i*(barW+gap);
+    return `<rect x="${x}" y="${H-h}" width="${barW}" height="${h}" fill="var(--muted)" rx="0.5"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="70" height="${H}" style="display:block;flex-shrink:0">${bars}</svg>`;
 }
 
 /* ---------- log a session ---------- */

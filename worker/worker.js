@@ -26,7 +26,7 @@ const ALLOWED = [
 const TARGET = {
   "GET /firearms":  "firearms_calc?select=*",
   "GET /inventory": "ammunition_inventory_calc?select=*",
-  "GET /sessions":  "range_sessions?select=date,rounds_fired&order=date.asc",
+  "GET /sessions":  "range_sessions?select=date,rounds_fired,firearm_id,caliber&order=date.asc",
   "POST /sessions":  "range_sessions",
   "POST /purchases": "ammo_purchases",
 };
